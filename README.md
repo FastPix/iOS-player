@@ -62,7 +62,7 @@ playerViewController.prepare(playbackID: playbackID,playbackOptions: PlaybackOpt
 playerViewController.prepare(playbackID: playbackID,playbackOptions: PlaybackOptions(streamType: "live")) 
 ```
 
-##Secure Playback:
+## Secure Playback:
 
 In FastPix Player you can ensure content security with token-based authentication, secure playback IDs, and HTTPS support for both live and on-demand streams.You can give playbackToken using parameter "playbackToken"
 
@@ -82,7 +82,7 @@ playerViewController.prepare(playbackID: playbackID, playbackOptions: PlaybackOp
 playerViewController.prepare(playbackID: playbackID, playbackOptions: PlaybackOptions(streamType: "on-demand",playbackToken: playbackToken)) 
 ```
 
-##Custom Domains: 
+## Custom Domains: 
 
 With the FastPix iOS Player SDK, you can stream videos from your own custom domain, whether you're serving public content or securing private videos using playback tokens. This flexible setup allows you to maintain and optimize performance, control access to your media with minimal configuration.You can set your customDomain with parameter "customDomain"
 
@@ -102,13 +102,13 @@ playerViewController.prepare(playbackID: playbackID, playbackOptions: PlaybackOp
 playerViewController.prepare(playbackID: playbackID, playbackOptions: PlaybackOptions(customDomain: "customDomain", streamType: "live")) 
 ```
 
-##Audio Track Switching: 
+## Audio Track Switching: 
 
 - Allow users to dynamically switch between audio tracks during playback, perfect for multi-language or additional audio options.
 
 - The FastPix iOS Player automatically detects and displays all available audio track options, If the playback supports or is integrated with multiple audio tracks simplifying the implementation process for dynamic audio switching.
 
-##Resolution Control: 
+## Resolution Control: 
 
 FastPix iOS Player allows you to configure playback resolution, including minimum, maximum, specific, and range-based resolutions for optimized streaming.
 
@@ -120,7 +120,7 @@ FastPix iOS Player allows you to configure playback resolution, including minimu
 | **`renditionOrder`** | Controls how resolution renditions are prioritized. Useful for customizing the adaptive strategy.                                 | `.standard`, `.descending`                                                                                                        | `.standard` |
 
 
-###Play with a Minimum Resolution: 
+### Play with a Minimum Resolution: 
 
 ```swift
 // play videos with custom min-resolution and playbackID 
@@ -133,7 +133,7 @@ playerViewController.prepare(playbackID: playbackID, playbackOptions: PlaybackOp
 
 playerViewController.prepare(playbackID: playbackID, playbackOptions: PlaybackOptions(minResolution : .atLeast270p, playbackToken: playbackToken)) 
 ```
-###Play with a Maximum Resolution:
+### Play with a Maximum Resolution:
 
 ```swift
 // play videos with custom max-resolution and playbackID  
@@ -146,7 +146,7 @@ playerViewController.prepare(playbackID: playbackID, playbackOptions: PlaybackOp
 
 playerViewController.prepare(playbackID: playbackID, playbackOptions: PlaybackOptions(maxResolution : .upTo1080p, playbackToken: playbackToken))
 ```
-###Play with a Custom Resolution:
+### Play with a Custom Resolution:
 
 ```swift
 // play videos with a specific resolution, playbackID and playbackToken 
@@ -160,7 +160,7 @@ playerViewController.prepare(playbackID: playbackID, playbackOptions: PlaybackOp
 playerViewController.prepare(playbackID: playbackID, playbackOptions: PlaybackOptions(minResolution : .atLeast270p, maxResolution : .upTo1080p ,playbackToken: playbackToken)) 
 ```
 
-##Rendition Order Customization: 
+## Rendition Order Customization: 
 
 With the FastPix iOS Player SDK, you can configure resolution selection priorities to deliver an optimized viewing experience to user preferences.
 
@@ -170,7 +170,7 @@ With the FastPix iOS Player SDK, you can configure resolution selection prioriti
 playerViewController.prepare(playbackID: playbackID, playbackOptions: PlaybackOptions(minResolution :  (example :  .atLeast270p) ,maxResolution : (example :  .upTo1080p ,renditionOrder:  .descending )) 
 ```
 
-####Each of these features is designed to enhance both flexibility and user experience, providing complete control over video playback, appearance, and user interactions in FastPix-player.
+#### Each of these features is designed to enhance both flexibility and user experience, providing complete control over video playback, appearance, and user interactions in FastPix-player.
 
 # Development
 
