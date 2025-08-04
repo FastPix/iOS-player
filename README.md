@@ -39,7 +39,7 @@ FastPix iOS Player SDK supports all the features mentioned below, ensuring easy 
 
 [Click here](https://docs.fastpix.io/docs/overview-and-features) for a detailed overview.
 
-##Media Playback: 
+## Media Playback: 
 
 With FastPix iOS Player you can play live and on-demand videos using streamType and playbackID.
 
@@ -172,9 +172,67 @@ playerViewController.prepare(playbackID: playbackID, playbackOptions: PlaybackOp
 
 #### Each of these features is designed to enhance both flexibility and user experience, providing complete control over video playback, appearance, and user interactions in FastPix-player.
 
+# Supporting tvOS
+
+The FastPix Player SDK also supports tvOS, enabling developers to integrate seamless video playback on Apple TV applications with the same features available for iOS Mobile Applications.
+
+## Installation on tvOS
+
+- Add the SDK to your project using Swift Package Manager, similar to iOS Mobile Applications.
+- Ensure your Xcode project supports tvOS as a deployment target.
+
+### Usage Example
+
+```swift
+import UIKit
+import AVKit
+import FastPixPlayerSDK
+
+class TVPlayerViewController: UIViewController {
+
+    lazy var playerViewController = AVPlayerViewController()
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+
+        self.prepareAvPlayerController()
+
+        let playbackOptions = PlaybackOptions(
+            streamType: "STREAM_TYPE",
+            playbackToken: "<YOUR_PLAYBACK_TOKEN>"
+        )
+
+        playerViewController.prepare(playbackID: "<PLAYBACK_ID>", playbackOptions: playbackOptions)
+
+        playerViewController.player?.play()
+    }
+
+    func prepareAvPlayerController() {
+        addChild(playerViewController)
+        playerView.addSubview(playerViewController.view)
+        playerViewController.view.translatesAutoresizingMaskIntoConstraints = false
+        
+        NSLayoutConstraint.activate([
+            playerViewController.view.leadingAnchor.constraint(equalTo: playerView.leadingAnchor),
+            playerViewController.view.trailingAnchor.constraint(equalTo: playerView.trailingAnchor),
+            playerViewController.view.topAnchor.constraint(equalTo: playerView.topAnchor),
+            playerViewController.view.bottomAnchor.constraint(equalTo: playerView.bottomAnchor)
+        ])
+        
+        playerViewController.didMove(toParent: self)
+    }
+}
+```
+
+# Documentation 
+
+[Click here](https://docs.fastpix.io/docs/ios-player) for a detailed documentation on FastPix Player SDK for iOS.
+
 # Development
 
 ## Maturity
 
 This SDK is currently in beta, and breaking changes may occur between versions even without a major version update. To avoid unexpected issues, we recommend pinning your dependency to a specific version. This ensures consistent behavior unless you intentionally update to a newer release.
+
+
 
