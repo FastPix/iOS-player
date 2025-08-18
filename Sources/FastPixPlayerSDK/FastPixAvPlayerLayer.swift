@@ -1,10 +1,3 @@
-//
-//  File.swift
-//  
-//
-//  Created by Neha Reddy on 21/07/24.
-//
-
 import AVFoundation
 import Foundation
 
@@ -32,15 +25,26 @@ extension AVPlayerLayer {
     ///   - playbackOptions: playback-related options such
     ///   as custom domain and maximum resolution
     public convenience init(playbackID: String,playbackOptions: PlaybackOptions) {
+        
         self.init()
         
-        let playerItem = AVPlayerItem(
-            playbackID: playbackID,
-            playbackOptions: playbackOptions
-        )
+        let playerItem: AVPlayerItem
+        
+        if let drmOptions = playbackOptions.drmOptions {
+            playerItem = AVPlayerItem(
+                playbackID: playbackID,
+                playbackOptions: playbackOptions,
+                licenseServerUrl: drmOptions.licenseURL,
+                certificateUrl: drmOptions.certificateURL
+            )
+        } else {
+            playerItem = AVPlayerItem(
+                playbackID: playbackID,
+                playbackOptions: playbackOptions
+            )
+        }
         
         let player = AVPlayer(playerItem: playerItem)
-        print(playerItem)
         self.player = player
     }
     
@@ -66,12 +70,24 @@ extension AVPlayerLayer {
     ///   - playbackOptions: playback-related options such
     ///   as custom domain and maximum resolution
     public func prepare(playbackID: String,playbackOptions: PlaybackOptions) {
-        prepare(
-            playerItem: AVPlayerItem(
+        
+        let playerItem: AVPlayerItem
+        
+        if let drmOptions = playbackOptions.drmOptions {
+            playerItem = AVPlayerItem(
+                playbackID: playbackID,
+                playbackOptions: playbackOptions,
+                licenseServerUrl: drmOptions.licenseURL,
+                certificateUrl: drmOptions.certificateURL
+            )
+        } else {
+            playerItem = AVPlayerItem(
                 playbackID: playbackID,
                 playbackOptions: playbackOptions
             )
-        )
+        }
+        
+        prepare(playerItem: playerItem)
     }
     
     internal func prepare(playerItem: AVPlayerItem) {

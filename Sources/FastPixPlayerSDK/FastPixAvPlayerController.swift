@@ -1,9 +1,3 @@
-//
-//  FastPixAvPlyaerController.swift
-//
-//
-//  Created by Neha Reddy on 16/06/24.
-//
 import Foundation
 import AVKit
 
@@ -15,6 +9,11 @@ extension AVPlayerViewController {
     /// Asset you'd like to play
     public convenience init(playbackID: String) {
         self.init()
+        
+        guard !playbackID.isEmpty else {
+            print("Error: Empty playback ID")
+            return
+        }
         
         let playerItem = AVPlayerItem(playbackID: playbackID)
         
@@ -33,13 +32,31 @@ extension AVPlayerViewController {
     public convenience init(playbackID: String,playbackOptions: PlaybackOptions) {
         self.init()
         
-        let playerItem = AVPlayerItem(
-            playbackID: playbackID,
-            playbackOptions: playbackOptions
-        )
+        // Validate playbackID
+        guard !playbackID.isEmpty else {
+            print("Error: Empty playback ID")
+            return
+        }
+        
+        let playerItem: AVPlayerItem
+        
+        if let drmOptions = playbackOptions.drmOptions {
+            // DRM-enabled playback
+            playerItem = AVPlayerItem(
+                playbackID: playbackID,
+                playbackOptions: playbackOptions,
+                licenseServerUrl: drmOptions.licenseURL,
+                certificateUrl: drmOptions.certificateURL
+            )
+        } else {
+            // Regular playback
+            playerItem = AVPlayerItem(
+                playbackID: playbackID,
+                playbackOptions: playbackOptions
+            )
+        }
         
         let player = AVPlayer(playerItem: playerItem)
-        print(playerItem)
         self.player = player
     }
     
@@ -65,12 +82,24 @@ extension AVPlayerViewController {
     ///   - playbackOptions: playback-related options such
     ///   as custom domain and maximum resolution
     public func prepare(playbackID: String,playbackOptions: PlaybackOptions) {
-        prepare(
-            playerItem: AVPlayerItem(
+        
+        let playerItem: AVPlayerItem
+        
+        if let drmOptions = playbackOptions.drmOptions {
+            playerItem = AVPlayerItem(
+                playbackID: playbackID,
+                playbackOptions: playbackOptions,
+                licenseServerUrl: drmOptions.licenseURL,
+                certificateUrl: drmOptions.certificateURL
+            )
+        } else {
+            playerItem = AVPlayerItem(
                 playbackID: playbackID,
                 playbackOptions: playbackOptions
             )
-        )
+        }
+        
+        prepare(playerItem: playerItem)
     }
     
     internal func prepare(playerItem: AVPlayerItem) {
@@ -85,4 +114,3 @@ extension AVPlayerViewController {
         }
     }
 }
-

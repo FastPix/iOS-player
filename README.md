@@ -170,6 +170,31 @@ With the FastPix iOS Player SDK, you can configure resolution selection prioriti
 playerViewController.prepare(playbackID: playbackID, playbackOptions: PlaybackOptions(minResolution :  (example :  .atLeast270p) ,maxResolution : (example :  .upTo1080p ,renditionOrder:  .descending )) 
 ```
 
+## DRM Support:
+
+FastPixPlayer supports DRM-encrypted playback using FairPlay.  
+To enable DRM, follow the guide below and include token (playback token), drm-token (DRM license JWT), licenseURL (DRM license server URL), and certificateURL (FairPlay application certificate URL) as attributes.  
+
+[Secure Playback with DRM – FastPix Documentation](https://docs.fastpix.io/docs/secure-playback-with-drm#/)
+
+```swift
+
+// play DRM-encrypted playback
+
+if let token = self.playbackToken {
+    let licenseURL = URL(string: "https://api.fastpix.io/v1/on-demand/drm/license/fairplay/\(self.playbackID)?token=\(token)")!
+    let certificateURL = URL(string: "https://api.fastpix.io/v1/on-demand/drm/cert/fairplay/\(self.playbackID)?token=\(token)")!
+            
+    playerViewController.prepare(
+        playbackID: playbackID,
+        playbackOptions: PlaybackOptions(
+            playbackToken: token,
+            drmOptions: DRMOptions(licenseURL: licenseURL, certificateURL: certificateURL)
+        )
+    )
+}
+```
+
 #### Each of these features is designed to enhance both flexibility and user experience, providing complete control over video playback, appearance, and user interactions in FastPix-player.
 
 # Supporting tvOS
@@ -233,6 +258,3 @@ class TVPlayerViewController: UIViewController {
 ## Maturity
 
 This SDK is currently in beta, and breaking changes may occur between versions even without a major version update. To avoid unexpected issues, we recommend pinning your dependency to a specific version. This ensures consistent behavior unless you intentionally update to a newer release.
-
-
-

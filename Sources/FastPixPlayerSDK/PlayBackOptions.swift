@@ -126,7 +126,6 @@ extension MinResolution {
             return "1440p"
         case .atLeast2160p:
             return "2160p"
-            
         }
     }
 }
@@ -168,6 +167,17 @@ extension Resolutions {
     }
 }
 
+/// DRM options for FairPlay playback
+public struct DRMOptions {
+    public let licenseURL: URL
+    public let certificateURL: URL
+    
+    public init(licenseURL: URL, certificateURL: URL) {
+        self.licenseURL = licenseURL
+        self.certificateURL = certificateURL
+    }
+}
+
 public struct PlaybackOptions {
     
     struct SignedPlaybackOptions {
@@ -185,6 +195,9 @@ public struct PlaybackOptions {
     var maxResolution: MaxResolution?
     var renditionOrder: RenditionOrder?
     var resolution: Resolutions?
+    
+    /// Optional DRM options for FairPlay
+    public var drmOptions: DRMOptions?
 }
 
 extension PlaybackOptions {
@@ -194,6 +207,7 @@ extension PlaybackOptions {
         self.streamType = streamType
         self.playbackPolicy = .unsigned
     }
+    
     public init(streamType: String) {
         self.streamType = streamType
     }
@@ -246,4 +260,37 @@ extension PlaybackOptions {
         self.resolution = resolution
     }
     
+    /// New: Init with DRM only
+    public init(drmOptions: DRMOptions) {
+        self.drmOptions = drmOptions
+    }
+    
+    /// New: Init with DRM + playbackToken
+    public init(playbackToken: String, drmOptions: DRMOptions) {
+        self.playbackPolicy = .signed(SignedPlaybackOptions(playbackToken: playbackToken))
+        self.drmOptions = drmOptions
+    }
+    
+    /// New: Init with DRM + other options
+    public init(customDomain: String? = nil,
+                streamType: String? = nil,
+                playbackToken: String? = nil,
+                drmOptions: DRMOptions? = nil,
+                minResolution: MinResolution? = .standard,
+                maxResolution: MaxResolution? = .standard,
+                renditionOrder: RenditionOrder? = .standard,
+                resolution: Resolutions? = .standard) {
+        self.customDomain = customDomain
+        self.streamType = streamType
+        if let token = playbackToken {
+            self.playbackPolicy = .signed(SignedPlaybackOptions(playbackToken: token))
+        } else {
+            self.playbackPolicy = .unsigned
+        }
+        self.drmOptions = drmOptions
+        self.minResolution = minResolution
+        self.maxResolution = maxResolution
+        self.renditionOrder = renditionOrder
+        self.resolution = resolution
+    }
 }

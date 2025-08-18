@@ -1,12 +1,6 @@
-//
-//  FastPixAvPlayerItem.swift
-//
-//
-//  Created by Neha Reddy on 16/06/24.
-//
-
 import AVFoundation
 import Foundation
+import ObjectiveC.runtime
 
 internal extension URLComponents {
     init(playbackID: String,playbackOptions: PlaybackOptions) {
@@ -56,7 +50,7 @@ internal extension URLComponents {
             )
             self.queryItems = queryItems
         }
-
+        
     }
 }
 
@@ -92,7 +86,7 @@ fileprivate func createPlaybackURL(playbackID: String,playbackOptions: PlaybackO
             )
         )
     }
-
+    
     if playbackOptions.maxResolution != .standard, playbackOptions.maxResolution != nil {
         queryItems.append(
             URLQueryItem(
@@ -133,9 +127,70 @@ fileprivate func createPlaybackURL(playbackID: String,playbackOptions: PlaybackO
     guard let playbackURL = components.url else {
         preconditionFailure("Invalid playback URL components")
     }
-//    print("---->",components.url?.absoluteString)
-    print("---->",playbackURL)
     return playbackURL
+}
+
+// MARK: - DRM Delegate
+public class FastPixDRMDelegate: NSObject, AVAssetResourceLoaderDelegate {
+    
+    private let licenseServerUrl: URL
+    private let certificateUrl: URL
+    
+    init(licenseServerUrl: URL, certificateUrl: URL) {
+        self.licenseServerUrl = licenseServerUrl
+        self.certificateUrl = certificateUrl
+    }
+    
+    @available(tvOS 13.0.0, *)
+    @available(iOS 13.0.0, *)
+    private func fetchCertificate() async throws -> Data {
+        let (data, _) = try await URLSession.shared.data(from: certificateUrl)
+        return data
+    }
+    
+    public func resourceLoader(_ resourceLoader: AVAssetResourceLoader,
+                               shouldWaitForLoadingOfRequestedResource loadingRequest: AVAssetResourceLoadingRequest) -> Bool {
+        
+        guard let url = loadingRequest.request.url, url.scheme == "skd" else {
+            return false
+        }
+        
+        if #available(iOS 13.0, *) {
+            if #available(tvOS 13.0, *) {
+                Task {
+                    do {
+                        let certificate = try await fetchCertificate()
+                        guard let contentIdData = url.host?.data(using: .utf8) else {
+                            loadingRequest.finishLoading(with: NSError(domain: "FastPixDRM", code: -1))
+                            return
+                        }
+                        
+                        let spcData = try loadingRequest.streamingContentKeyRequestData(
+                            forApp: certificate,
+                            contentIdentifier: contentIdData,
+                            options: nil
+                        )
+                        var request = URLRequest(url: licenseServerUrl)
+                        request.httpMethod = "POST"
+                        request.httpBody = spcData
+                        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+                        
+                        let (ckcData, _) = try await URLSession.shared.data(for: request)
+                        loadingRequest.dataRequest?.respond(with: ckcData)
+                        loadingRequest.finishLoading()
+                    } catch {
+                        loadingRequest.finishLoading(with: error)
+                    }
+                }
+            } else {
+                // Fallback on earlier versions
+            }
+        } else {
+            // Fallback on earlier versions
+        }
+        
+        return true
+    }
 }
 
 internal extension AVPlayerItem {
@@ -150,7 +205,6 @@ internal extension AVPlayerItem {
     //
     // - Parameter playbackID: playback ID of the FastPix Asset
     convenience init(playbackID: String) {
-        //        self.init(playbackID: playbackID)
         
         let defaultOptions = PlaybackOptions() // Ensure this struct has default values
         
@@ -160,7 +214,7 @@ internal extension AVPlayerItem {
         )
         self.init(url: playbackURL)
     }
-
+    
     // Initializes a player item with a playback URL that
     // references your FastPix Video at the supplied playback ID.
     // The playback ID must be public.
@@ -174,5 +228,23 @@ internal extension AVPlayerItem {
             playbackOptions: playbackOptions
         )
         self.init(url: playbackURL)
+    }
+    
+    
+    // DRM initializer
+    convenience init(playbackID: String,
+                     playbackOptions: PlaybackOptions,
+                     licenseServerUrl: URL,
+                     certificateUrl: URL) {
+        let playbackURL = createPlaybackURL(
+            playbackID: playbackID,
+            playbackOptions: playbackOptions
+        )
+        let asset = AVURLAsset(url: playbackURL)
+        let delegate = FastPixDRMDelegate(licenseServerUrl: licenseServerUrl,
+                                          certificateUrl: certificateUrl)
+        asset.resourceLoader.setDelegate(delegate, queue: DispatchQueue.global(qos: .userInitiated))
+        self.init(asset: asset)
+        objc_setAssociatedObject(self, "FastPixDRMDelegateKey", delegate, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
 }
