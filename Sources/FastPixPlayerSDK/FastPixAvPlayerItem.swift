@@ -1,3 +1,4 @@
+
 import AVFoundation
 import Foundation
 import ObjectiveC.runtime
@@ -188,7 +189,6 @@ public class FastPixDRMDelegate: NSObject, AVAssetResourceLoaderDelegate {
         } else {
             // Fallback on earlier versions
         }
-        
         return true
     }
 }
@@ -229,7 +229,6 @@ internal extension AVPlayerItem {
         )
         self.init(url: playbackURL)
     }
-    
     
     // DRM initializer
     convenience init(playbackID: String,

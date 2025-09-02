@@ -1,3 +1,4 @@
+
 import AVFoundation
 import Foundation
 
@@ -13,7 +14,6 @@ extension AVPlayerLayer {
         let playerItem = AVPlayerItem(playbackID: playbackID)
         
         let player = AVPlayer(playerItem: playerItem)
-        print(playerItem)
         self.player = player
     }
     
@@ -86,7 +86,6 @@ extension AVPlayerLayer {
                 playbackOptions: playbackOptions
             )
         }
-        
         prepare(playerItem: playerItem)
     }
     

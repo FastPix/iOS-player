@@ -1,9 +1,3 @@
-//
-//  PlayingOptions.swift
-//
-//
-//  Created by Neha Reddy on 16/06/24.
-//
 
 import Foundation
 
@@ -22,6 +16,7 @@ public enum MaxResolution {
     
     case upTo720p
     
+
     case upTo1080p
     
     case upTo1440p
@@ -49,7 +44,6 @@ public enum MinResolution {
     case atLeast1440p
     
     case atLeast2160p
-    
 }
 
 public enum Resolutions {
@@ -183,6 +177,7 @@ public struct PlaybackOptions {
     struct SignedPlaybackOptions {
         var playbackToken: String?
     }
+    
     enum PlaybackPolicy {
         case unsigned
         case signed(SignedPlaybackOptions)

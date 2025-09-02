@@ -1,6 +1,18 @@
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
+
+## [0.3.0]
+
+ - FastPix iOS Player now supports playlist.
+ - Create and manage playlists with multiple `FastPixPlaylistItems`.  
+ - Add playlist directly to the player using `addPlaylist()` method.  
+ - Auto-play option (`isAutoPlayEnabled`) to automatically continue playback with the next item.  
+ - Option to hide the SDK’s default controls (`hideDefaultControls`) for building custom UI.  
+ - Playlist state notifications via `NotificationCenter` (`FastPixPlaylistStateChanged`) for updating UI elements such as titles, buttons, or thumbnails.  
+ - Built-in navigation methods: `next()`, `previous()`, and `jumpTo(index:)` for moving between items.  
+ - Navigation methods can also be connected to custom UI buttons (e.g., Next/Previous/Episode selectors) 
 
 ## [0.2.0]
 
@@ -19,4 +31,3 @@ All notable changes to this project will be documented in this file.
     - Range-based resolution configuration.
 - **Rendition Order Customization**: Added support for ascending or descending rendition selection.
 - **Swift Package Manager Support**: SDK is installable via SPM using the repo URL.
-

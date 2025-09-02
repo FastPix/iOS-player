@@ -195,6 +195,123 @@ if let token = self.playbackToken {
 }
 ```
 
+## Playlist Support
+
+FastPix iOS Player now supports playlists, allowing you to manage and navigate multiple videos within a single playback session.
+
+### Create a Playlist
+
+```swift
+let playlist = [ 
+    FastPixPlaylistItem(
+        playbackId: "<PLAYBACK_ID_1>",
+        title: "Episode 1: <TITLE>",
+        description: "<DESCRIPTION>",
+        thumbnail: "https://example.com/thumbnail1.jpg",
+        duration: "01:00:00", // format HH:MM:SS
+        token: "<PLAYBACK_TOKEN>",   // optional
+        drmToken: "<DRM_TOKEN>"      // optional
+    ),
+    FastPixPlaylistItem(
+        playbackId: "<PLAYBACK_ID_2>",
+        title: "Episode 2: <TITLE>",
+        description: "<DESCRIPTION>",
+        thumbnail: "https://example.com/thumbnail2.jpg",
+        duration: "00:45:00",
+        token: "<PLAYBACK_TOKEN>",
+        drmToken: "<DRM_TOKEN>"
+    ),
+    FastPixPlaylistItem(
+        playbackId: "<PLAYBACK_ID_3>",
+        title: "Episode 3: <TITLE>",
+        description: "<DESCRIPTION>",
+        thumbnail: "https://example.com/thumbnail3.jpg",
+        duration: "00:30:00",
+        token: "<PLAYBACK_TOKEN>",
+        drmToken: "<DRM_TOKEN>"
+    )
+]
+```
+### Add Playlist to Player
+
+```swift
+// Add the playlist directly to the player instance using this method
+
+playerViewController.addPlaylist(playlist)
+```
+
+### Enable Auto-Play
+
+```swift
+// Automatically play the next item in the playlist
+
+playerViewController.isAutoPlayEnabled = true
+```
+
+### Hide Default Controls
+
+```swift
+// Hide the SDK’s built-in player controls if you want custom UI
+
+playerViewController.hideDefaultControls = true
+```
+
+### Observe Playlist State Changes
+
+You can observe playlist state updates (such as when the current item changes) using `NotificationCenter`.  
+This allows you to update your UI (titles, buttons, progress, etc.) whenever the playlist state changes.
+
+```swift
+override func viewDidLoad() {
+    super.viewDidLoad()
+    setupPlaylistStateObserver()
+}
+
+private func setupPlaylistStateObserver() {
+    NotificationCenter.default.addObserver(
+        self,
+        selector: #selector(playlistStateChanged),
+        name: Notification.Name("FastPixPlaylistStateChanged"),
+        object: playerViewController  // IMPORTANT: Observe the specific player instance
+    )
+}
+
+@objc private func playlistStateChanged(_ notification: Notification) {
+    DispatchQueue.main.async {
+        // Example: Update current video title
+        self.updateCurrentTitle()
+        
+        // Example: Update button visibility
+        self.updateButtonVisibility()
+        
+        // Log the update
+        if let current = self.playerViewController.currentPlaylistItem {
+            NSLog("current item: \(current)")
+        }
+    }
+}
+```
+
+### Playlist Navigation
+
+FastPix Player SDK provides built-in methods to navigate between playlist items. You can move to the next or previous video, or jump directly to a specific index in the playlist. These methods can also be tied to your own UI controls (like **Next**, **Previous**, or **Jump to Episode** buttons), making it easy to customize the playback experience for your users. The index is zero-based (e.g., `jumpTo(index: 0)` plays the first item), and you can combine these navigation methods with the Playlist State Observer to dynamically update the UI (such as the current video title, button states, or thumbnails).
+
+#### Example Usage
+
+```swift
+// Go to the next playlist item
+
+playerViewController.next()
+
+// Go back to the previous playlist item
+
+playerViewController.previous()
+
+// Jump to a specific item in the playlist (e.g., index 2)
+
+playerViewController.jumpTo(index: 2)
+```
+
 #### Each of these features is designed to enhance both flexibility and user experience, providing complete control over video playback, appearance, and user interactions in FastPix-player.
 
 # Supporting tvOS
