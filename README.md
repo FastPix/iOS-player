@@ -170,6 +170,38 @@ With the FastPix iOS Player SDK, you can configure resolution selection prioriti
 playerViewController.prepare(playbackID: playbackID, playbackOptions: PlaybackOptions(minResolution :  (example :  .atLeast270p) ,maxResolution : (example :  .upTo1080p ,renditionOrder:  .descending )) 
 ```
 
+## Data Integration: 
+
+The FastPix iOS Player supports data integration for tracking video playback, user interaction, and environment details. This is useful for analytics, monitoring playback behavior, and generating detailed insights of the playback.
+
+```swift
+import FastpixVideoDataAVPlayer
+
+let fpDataSDK = initAvPlayerTracking()
+
+let customMetadata = [
+    "data": [
+        workspace_id: "WORKSPACE_KEY", // Unique key to identify your workspace (replace with your actual workspace key)
+        video_title: "Test Content", // Title of the video being played (replace with the actual title of your video)
+        video_id: "f01a98s76t90p88i67x", // A unique identifier for the video (replace with your actual video ID for tracking purposes)
+        viewer_id: "user12345", // A unique identifier for the viewer (e.g., user ID, session ID, or any other unique value)
+        video_content_type: "series", // Type of content being played (e.g., series, movie, etc.)
+        video_stream_type: "on-demand", // Type of streaming (e.g., live, on-demand)
+
+        // Custom fields for additional business logic
+        custom_1: "", // Use this field to pass any additional data needed for your specific business logic
+        custom_2: "", // Use this field to pass any additional data needed for your specific business logic
+
+        // Add any additional metadata
+    ]
+]
+// Track AVPlayer Controller
+fpDataSDK.trackAvPlayerController(
+    playerController: playerController,   // The AVPlayerViewController instance managing the playback
+    customMetadata: customMetadata
+)
+```
+
 ## DRM Support:
 
 FastPixPlayer supports DRM-encrypted playback using FairPlay.  
