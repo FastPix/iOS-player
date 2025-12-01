@@ -3,6 +3,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0]
+
+- FastPix iOS Player now supports fully customizable player controls.
+- Integrate your own Play/Pause button while staying synced with the player’s internal playback state.
+- Introduced support for a custom Seek Bar using FastPixSeekManager with real-time updates for: Current playback time, Total duration, Buffered time, Seek start/end events.
+- Developers can now manage orientation handling manually, making it easier to build custom full-screen or embedded player UIs.
+- Built-in seek navigation improvements (seekForward(), seekBackward(), seekToPercentage()) for enhanced control customization.
+- Custom UI elements can now listen to playback and buffering updates using delegate callbacks to stay perfectly in sync with the player.
+
 ## [0.3.0]
 
  - FastPix iOS Player now supports playlist.
