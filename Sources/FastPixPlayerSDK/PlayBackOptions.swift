@@ -16,7 +16,6 @@ public enum MaxResolution {
     
     case upTo720p
     
-
     case upTo1080p
     
     case upTo1440p

@@ -2,8 +2,16 @@
 import Foundation
 import AVKit
 
+public protocol FastPixPlayerDelegate: AnyObject {
+    func playerDidStartPlaying(_ player: AVPlayerViewController)
+    func playerDidPause(_ player: AVPlayerViewController)
+    func playerDidFinish(_ player: AVPlayerViewController)
+    func playerDidFail(_ player: AVPlayerViewController, error: Error)
+}
+
 //MARK: - Playlist Classes
 public struct FastPixPlaylistItem {
+    
     public let playbackId: String
     public let title: String
     public let description: String
@@ -75,7 +83,7 @@ extension AVPlayerViewController {
     private static var autoPlayObservers: [ObjectIdentifier: NSObjectProtocol] = [:]
     private static var autoPlayEnabled: [ObjectIdentifier: Bool] = [:]
     
-    /// Enable/disable auto-play for next playlist item when current item finishes
+    
     public var isAutoPlayEnabled: Bool {
         get {
             let id = ObjectIdentifier(self)
@@ -129,7 +137,7 @@ extension AVPlayerViewController {
         guard hasPlaylist && canGoNext else {
             return
         }
-            
+        
         // Small delay for smooth transition
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             if self.next() {
@@ -163,6 +171,7 @@ extension AVPlayerViewController {
 private var playlistStorage: [ObjectIdentifier: FastPixPlaylistManager] = [:]
 
 extension AVPlayerViewController {
+    
     
     /// Initializes an AVPlayerViewController that's configured
     /// back it's playback performance.
@@ -346,7 +355,7 @@ extension AVPlayerViewController {
     public func next() -> Bool {
         guard let manager = playlistManager,
               let _ = manager.nextItem() else { return false }
-        
+        print("Loading next item in the playlist")
         loadCurrentPlaylistItem()
         return true
     }
@@ -356,7 +365,6 @@ extension AVPlayerViewController {
     public func previous() -> Bool {
         guard let manager = playlistManager,
               let _ = manager.previousItem() else { return false }
-        
         loadCurrentPlaylistItem()
         return true
     }
@@ -406,7 +414,7 @@ extension AVPlayerViewController {
         if !current.token.isEmpty {
             
             options.playbackPolicy = .signed(
-                        .init(playbackToken: current.token))
+                .init(playbackToken: current.token))
             
             let base = "https://api.fastpix.io/v1/on-demand/drm"
             let licence = "\(base)/license/fairplay/\(current.playbackId)?token=\(current.token)"
@@ -437,5 +445,168 @@ extension AVPlayerViewController {
         let id = ObjectIdentifier(self)
         playlistStorage.removeValue(forKey: id)
         cleanupAutoPlay()
+    }
+}
+
+// MARK: - Playback Control Methods
+extension AVPlayerViewController {
+    
+    /// Starts or resumes playback
+    public func play() {
+        player?.play()
+    }
+    
+    /// Pauses playback at current position
+    public func pause() {
+        player?.pause()
+    }
+    
+    /// Toggles between play and pause
+    public func togglePlayPause() {
+        if player?.timeControlStatus == .playing {
+            pause()
+        } else {
+            play()
+        }
+    }
+    
+    /// Check if player is currently playing
+    public var isPlaying: Bool {
+        return player?.timeControlStatus == .playing
+    }
+    
+    /// Check if player is paused
+    public var isPaused: Bool {
+        return player?.timeControlStatus == .paused
+    }
+}
+
+// Add to FastPixAvPlayerController.swift
+public enum FastPixPlaybackState {
+    case idle
+    case loading
+    case playing
+    case paused
+    case stopped
+    case buffering
+    case failed(Error)
+}
+
+extension AVPlayerViewController {
+    
+    /// Get current playback state
+    public var playbackState: FastPixPlaybackState {
+        guard let player = player else { return .idle }
+        
+        switch player.timeControlStatus {
+        case .playing:
+            return .playing
+        case .paused:
+            return player.currentItem == nil ? .stopped : .paused
+        case .waitingToPlayAtSpecifiedRate:
+            return .buffering
+        @unknown default:
+            return .idle
+        }
+    }
+}
+
+// Add to AVPlayerViewController extension
+extension AVPlayerViewController {
+    
+    private static var delegateKey = "FastPixPlayerDelegate"
+    
+    public weak var fastPixDelegate: FastPixPlayerDelegate? {
+        get {
+            return objc_getAssociatedObject(self, &Self.delegateKey) as? FastPixPlayerDelegate
+        }
+        set {
+            objc_setAssociatedObject(self, &Self.delegateKey, newValue, .OBJC_ASSOCIATION_ASSIGN)
+            if newValue != nil {
+                setupPlaybackObservers()
+            }
+        }
+    }
+    
+    private func setupPlaybackObservers() {
+        // Observe play/pause status
+        player?.addObserver(self, forKeyPath: "timeControlStatus", options: [.new], context: nil)
+        
+        // Observe playback end
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(playerDidFinishPlaying),
+            name: .AVPlayerItemDidPlayToEndTime,
+            object: player?.currentItem
+        )
+    }
+    
+    @objc private func playerDidFinishPlaying() {
+        fastPixDelegate?.playerDidFinish(self)
+    }
+}
+
+extension AVPlayerViewController {
+    
+    // MARK: - Seek Manager Integration
+    
+    private static var seekManagerKey = "FastPixSeekManager"
+    
+    public var seekManager: FastPixSeekManager? {
+        get {
+            return objc_getAssociatedObject(self, &Self.seekManagerKey) as? FastPixSeekManager
+        }
+        set {
+            objc_setAssociatedObject(self, &Self.seekManagerKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+    }
+    
+    /// Initialize seek manager
+    public func setupSeekManager(delegate: FastPixSeekDelegate? = nil) {
+        guard let player = player else { return }
+        seekManager = FastPixSeekManager(player: player)
+        seekManager?.delegate = delegate
+    }
+    
+    // MARK: - Public Seek API
+    
+    /// Get current playback time
+    public func getCurrentTime() -> TimeInterval {
+        return seekManager?.getCurrentTime() ?? 0
+    }
+    
+    /// Get video duration
+    public func getDuration() -> TimeInterval {
+        return seekManager?.getDuration() ?? 0
+    }
+    
+    /// Set start time for "Continue Watching"
+    public func setStartTime(_ time: TimeInterval) {
+        seekManager?.setStartTime(time)
+    }
+    
+    /// Enable automatic resume from start time
+    public func enableStartTimeResume(_ enable: Bool) {
+        seekManager?.enableStartTimeResume(enable)
+    }
+    
+    /// Seek to specific time
+    public func seek(to time: TimeInterval, completion: ((Bool) -> Void)? = nil) {
+        seekManager?.seekTo(time: time, completion: completion)
+    }
+    
+    /// Seek to percentage (0.0 to 1.0)
+    public func seek(toPercentage percentage: Double, completion: ((Bool) -> Void)? = nil) {
+        seekManager?.seekToPercentage(percentage, completion: completion)
+    }
+    
+    /// Seek forward
+    public func seekForward(by seconds: TimeInterval = 10) {
+        seekManager?.seekForward(by: seconds)
+    }
+    
+    /// Seek backward
+    public func seekBackward(by seconds: TimeInterval = 10) {
+        seekManager?.seekBackward(by: seconds)
     }
 }

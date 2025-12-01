@@ -101,3 +101,72 @@ extension AVPlayerLayer {
         }
     }
 }
+
+// MARK: - Playback Control Methods
+extension AVPlayerLayer {
+    
+    /// Starts or resumes playback
+    public func play() {
+        player?.play()
+    }
+    
+    /// Pauses playback at current position
+    public func pause() {
+        player?.pause()
+    }
+    
+    /// Toggles between play and pause
+    public func togglePlayPause() {
+        if player?.timeControlStatus == .playing {
+            pause()
+        } else {
+            play()
+        }
+    }
+    
+    /// Check playback status
+    public var isPlaying: Bool {
+        return player?.timeControlStatus == .playing
+    }
+}
+
+extension AVPlayerLayer {
+    
+    private static var seekManagerKey = "FastPixSeekManager"
+    
+    public var seekManager: FastPixSeekManager? {
+        get {
+            return objc_getAssociatedObject(self, &Self.seekManagerKey) as? FastPixSeekManager
+        }
+        set {
+            objc_setAssociatedObject(self, &Self.seekManagerKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+    }
+    
+    public func setupSeekManager(delegate: FastPixSeekDelegate? = nil) {
+        guard let player = player else { return }
+        seekManager = FastPixSeekManager(player: player)
+        seekManager?.delegate = delegate
+    }
+    
+    // Replicate all seek methods from AVPlayerViewController
+    public func getCurrentTime() -> TimeInterval {
+        return seekManager?.getCurrentTime() ?? 0
+    }
+    
+    public func getDuration() -> TimeInterval {
+        return seekManager?.getDuration() ?? 0
+    }
+    
+    public func setStartTime(_ time: TimeInterval) {
+        seekManager?.setStartTime(time)
+    }
+    
+    public func enableStartTimeResume(_ enable: Bool) {
+        seekManager?.enableStartTimeResume(enable)
+    }
+    
+    public func seek(to time: TimeInterval, completion: ((Bool) -> Void)? = nil) {
+        seekManager?.seekTo(time: time, completion: completion)
+    }
+}

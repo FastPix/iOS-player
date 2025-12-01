@@ -128,6 +128,7 @@ fileprivate func createPlaybackURL(playbackID: String,playbackOptions: PlaybackO
     guard let playbackURL = components.url else {
         preconditionFailure("Invalid playback URL components")
     }
+    print("Playback URL----->",playbackURL)
     return playbackURL
 }
 
