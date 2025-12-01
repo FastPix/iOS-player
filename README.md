@@ -344,6 +344,182 @@ playerViewController.previous()
 playerViewController.jumpTo(index: 2)
 ```
 
+## Customizable Player Support
+
+FastPix iOS Player SDK now allows developers to create a fully custom video player UI by hiding the default SDK controls and implementing their own Play/Pause button, Seek Bar, Orientation handling, and additional interactive components.
+This provides complete flexibility to build custom designs while still using the FastPix engine for playback, buffering, analytics, and playlists.
+
+With customizable player support, you can:
+- Embed the FastPix player inside any custom UIView
+- Hide the SDK's native controls
+- Add your own Play/Pause buttons
+- Implement your own Seek Bar UI
+- Create your own gesture-based UI (tap to show/hide)
+- Customize layout for portrait/landscape
+
+To get started, you simply hide the default controls and then use AVPlayerViewController inside your own UI container.
+
+### Hide Default Controls
+Disable the built-in player UI:
+
+```swift 
+playerViewController.hideDefaultControls = true
+```
+### Embed the Player Inside a Custom View
+This is the first step for any custom UI setup.
+Place the FastPix player inside your own UIView so you can overlay your custom controls.
+
+```swift
+func prepareAvPlayerController() {
+    addChild(playerViewController)
+    playerView.addSubview(playerViewController.view)
+    playerViewController.didMove(toParent: self)
+
+    playerViewController.view.translatesAutoresizingMaskIntoConstraints = false
+
+    NSLayoutConstraint.activate([
+        playerViewController.view.topAnchor.constraint(equalTo: playerView.topAnchor),
+        playerViewController.view.bottomAnchor.constraint(equalTo: playerView.bottomAnchor),
+        playerViewController.view.leadingAnchor.constraint(equalTo: playerView.leadingAnchor),
+        playerViewController.view.trailingAnchor.constraint(equalTo: playerView.trailingAnchor)
+    ])
+}
+```
+### Custom Play/Pause Button
+You can handle playback in two ways depending on your UI preference:
+1.Use togglePlayPause() — the SDK automatically switches between play and pause.
+2.Manually control playback by calling play() and pause().
+
+```swift
+private func setupPlayPauseButton() {
+    playPauseButton = UIButton(type: .system)
+    playPauseButton.translatesAutoresizingMaskIntoConstraints = false
+    playPauseButton.tintColor = .white
+    playPauseButton.backgroundColor = UIColor.black.withAlphaComponent(0.55)
+    playPauseButton.layer.cornerRadius = 32
+    playPauseButton.clipsToBounds = true
+
+    let icon = UIImage(systemName: "pause.fill")?.withConfiguration(
+        UIImage.SymbolConfiguration(pointSize: 30, weight: .bold)
+    )
+    playPauseButton.setImage(icon, for: .normal)
+
+    playPauseButton.addTarget(self, action: #selector(playPauseTapped), for: .touchUpInside)
+    playerView.addSubview(playPauseButton)
+
+    NSLayoutConstraint.activate([
+        playPauseButton.centerXAnchor.constraint(equalTo: playerView.centerXAnchor),
+        playPauseButton.centerYAnchor.constraint(equalTo: playerView.centerYAnchor),
+        playPauseButton.widthAnchor.constraint(equalToConstant: 64),
+        playPauseButton.heightAnchor.constraint(equalToConstant: 64)
+    ])
+}
+
+@objc private func playPauseTapped() {
+    // Option 1: Toggle automatically (recommended)
+    playerViewController.togglePlayPause()
+
+    // Option 2: Manually control playback (use if needed)
+    // playerViewController.play()
+    // playerViewController.pause()
+}
+```
+### Auto-Update Play/Pause Button
+
+```swift
+playerStatusObserver = player.observe(\.timeControlStatus, options: [.new, .initial]) {
+    [weak self] player, _ in
+    DispatchQueue.main.async {
+        self?.updatePlayPauseButton(for: player.timeControlStatus)
+    }
+}
+```
+### Custom Seek Bar (FastPixSeekBar + FastPixSeekManager)
+#### Add Seek Bar
+```swift
+private func setupSeekBar() {
+    seekBar.translatesAutoresizingMaskIntoConstraints = false
+    seekBar.layer.cornerRadius = 3
+    playerView.addSubview(seekBar)
+
+    NSLayoutConstraint.activate([
+        seekBar.leadingAnchor.constraint(equalTo: playerView.leadingAnchor, constant: 16),
+        seekBar.trailingAnchor.constraint(equalTo: playerView.trailingAnchor, constant: -16),
+        seekBar.bottomAnchor.constraint(equalTo: playerView.bottomAnchor, constant: -20),
+        seekBar.heightAnchor.constraint(equalToConstant: 28)
+    ])
+
+    seekBar.onSeekEnd = { [weak self] time in
+        self?.playerViewController.seek(to: time)
+    }
+}
+```
+#### Seek Delegate
+
+```swift
+extension VideoPlayerViewController: FastPixSeekDelegate {
+
+    func onBufferedTimeUpdate(loaded: TimeInterval, duration: TimeInterval) {
+        seekBar.updateBuffer(loaded: loaded, duration: duration)
+    }
+
+    func onTimeUpdate(currentTime: TimeInterval, duration: TimeInterval) {
+        seekBar.updateTime(current: currentTime, duration: duration)
+    }
+
+    func onSeekStart(at time: TimeInterval) {}
+    func onSeekEnd(at time: TimeInterval) {}
+}
+```
+#### Tap Gesture to Show/Hide Controls
+
+```swift
+@objc private func togglePlayerControls() {
+    let shouldShow = playPauseButton.alpha == 0
+    shouldShow ? showAllControls(animated: true) : hideAllControls(animated: true)
+}
+```
+#### Auto-Hide After Delay
+
+```swift
+private func autoHideControls(after delay: TimeInterval = 3.0) {
+    controlsHideWorkItem?.cancel()
+    let workItem = DispatchWorkItem { [weak self] in
+        self?.hideAllControls(animated: true)
+    }
+    controlsHideWorkItem = workItem
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+}
+```
+#### Orientation Handling
+##### Update layout when device rotates:
+
+```swift 
+override func viewWillTransition(
+    to size: CGSize,
+    with coordinator: UIViewControllerTransitionCoordinator
+) {
+    super.viewWillTransition(to: size, with: coordinator)
+
+    coordinator.animate(alongsideTransition: { _ in
+        self.updatePlayPauseConstraintsForOrientation()
+        self.view.layoutIfNeeded()
+    })
+}
+```
+##### Orientation logic:
+
+```swift 
+private func isLandscapeMode() -> Bool {
+    if #available(iOS 13.0, *) {
+        let orientation = view.window?.windowScene?.interfaceOrientation
+        return orientation == .landscapeLeft || orientation == .landscapeRight
+    } else {
+        return UIApplication.shared.statusBarOrientation.isLandscape
+    }
+}
+```
+
 #### Each of these features is designed to enhance both flexibility and user experience, providing complete control over video playback, appearance, and user interactions in FastPix-player.
 
 # Supporting tvOS
