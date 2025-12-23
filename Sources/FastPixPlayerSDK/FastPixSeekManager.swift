@@ -67,19 +67,16 @@ public class FastPixSeekManager: NSObject{
     
     // MARK: - Public API Functions
     
-    /// Get current playback time in seconds
     public func getCurrentTime() -> TimeInterval {
         guard let player = player else { return 0 }
         return player.currentTime().seconds
     }
     
-    /// Get total duration of the video in seconds
     public func getDuration() -> TimeInterval {
         guard let duration = player?.currentItem?.duration else { return 0 }
         return duration.isNumeric ? duration.seconds : 0
     }
     
-    /// Set start time for "Continue Watching" functionality
     public func setStartTime(_ time: TimeInterval) {
         self.startTime = time
         if enableStartTimeResumeFlag && time > 0 {
@@ -87,7 +84,6 @@ public class FastPixSeekManager: NSObject{
         }
     }
     
-    /// Enable/disable automatic resume from start time
     public func enableStartTimeResume(_ enable: Bool) {
         self.enableStartTimeResumeFlag = enable
         if enable && startTime > 0 {
@@ -95,7 +91,6 @@ public class FastPixSeekManager: NSObject{
         }
     }
     
-    /// Seek to specific time with completion handler
     public func seekTo(time: TimeInterval, completion: ((Bool) -> Void)? = nil) {
         guard let player = player else {
             completion?(false)
@@ -132,14 +127,12 @@ public class FastPixSeekManager: NSObject{
         }
     }
     
-    /// Seek to percentage (0.0 to 1.0)
     public func seekToPercentage(_ percentage: Double, completion: ((Bool) -> Void)? = nil) {
         let duration = getDuration()
         let time = duration * max(0, min(1, percentage))
         seekTo(time: time, completion: completion)
     }
     
-    /// Seek forward by specified seconds
     public func seekForward(by seconds: TimeInterval = 10) {
         let currentTime = getCurrentTime()
         let duration = getDuration()
@@ -147,7 +140,6 @@ public class FastPixSeekManager: NSObject{
         seekTo(time: newTime)
     }
     
-    /// Seek backward by specified seconds
     public func seekBackward(by seconds: TimeInterval = 10) {
         let currentTime = getCurrentTime()
         let newTime = max(currentTime - seconds, 0)
@@ -186,6 +178,11 @@ public class FastPixSeekManager: NSObject{
         item.removeObserver(self, forKeyPath: "loadedTimeRanges")
         isObservingBuffer = false
         observedItem = nil
+    }
+    
+    public func refreshBufferObservation() {
+        removeBufferObserver()
+        observeBufferingProgress()
     }
     
     // MARK: - Cleanup

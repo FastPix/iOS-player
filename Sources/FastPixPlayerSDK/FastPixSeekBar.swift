@@ -1,29 +1,44 @@
 
 import UIKit
+import Foundation
 
 private class CustomSlider: UISlider {
     
-    // Make the track taller and adjust origin to center vertically
     override func trackRect(forBounds bounds: CGRect) -> CGRect {
         let originalRect = super.trackRect(forBounds: bounds)
         let newHeight: CGFloat = 8
         let newY = (bounds.height - newHeight) / 2
-        return CGRect(x: originalRect.origin.x, y: newY, width: originalRect.width, height: newHeight)
+        return CGRect(
+            x: originalRect.origin.x,
+            y: newY,
+            width: originalRect.width,
+            height: newHeight
+        )
     }
-    
-    // Optionally adjust thumb rect to prevent clipping
-    override func thumbRect(forBounds bounds: CGRect, trackRect rect: CGRect, value: Float) -> CGRect {
+
+    override func thumbRect(
+        forBounds bounds: CGRect,
+        trackRect rect: CGRect,
+        value: Float
+    ) -> CGRect {
         var thumbRect = super.thumbRect(forBounds: bounds, trackRect: rect, value: value)
-        let offset: CGFloat = 2
-        thumbRect.origin.y = max(thumbRect.origin.y - offset, 0)
         return thumbRect
     }
+
 }
 
 public class FastPixSeekBar: UIView {
     
     // UI Elements
     private let slider = CustomSlider()
+    
+    // Expose slider pan gesture
+    public var panGestureRecognizer: UIPanGestureRecognizer? {
+        return slider.gestureRecognizers?
+            .compactMap { $0 as? UIPanGestureRecognizer }
+            .first
+    }
+    
     private let currentTimeLabel = UILabel()
     private let durationLabel = UILabel()
     private let bufferProgressView = UIProgressView()
@@ -31,6 +46,13 @@ public class FastPixSeekBar: UIView {
     // Callbacks
     public var onSeekStart: ((TimeInterval) -> Void)?
     public var onSeekEnd: ((TimeInterval) -> Void)?
+    
+    // new: for spritesheet
+    public var onPreviewScrub: ((TimeInterval) -> Void)?
+    public var onPreviewVisibilityChanged: ((Bool, TimeInterval) -> Void)?
+    
+    public var previewView = FastPixSeekPreviewView()
+    private var isPreviewVisible = false
     
     // State
     private var isDragging = false
@@ -80,47 +102,105 @@ public class FastPixSeekBar: UIView {
         durationLabel.textAlignment = .right
         durationLabel.text = "00:00"
         addSubview(durationLabel)
+        previewView.isHidden = true
+        
     }
     
-    // MARK: - Layout
     public override func layoutSubviews() {
         super.layoutSubviews()
-        
+
         let labelWidth: CGFloat = 50
         let spacing: CGFloat = 10
-        let verticalInset: CGFloat = 6          // Add vertical inset to avoid cropping
-        let controlHeight = bounds.height - 2 * verticalInset
-        
-        // Current time label (left)
-        currentTimeLabel.frame = CGRect(x: 0, y: 0, width: labelWidth, height: bounds.height)
-        
-        // Duration label (right)
-        durationLabel.frame = CGRect(x: bounds.width - labelWidth, y: 0, width: labelWidth, height: bounds.height)
-        
-        // Slider (middle)
+
+        // Labels
+        currentTimeLabel.frame = CGRect(
+            x: 0,
+            y: 0,
+            width: labelWidth,
+            height: bounds.height
+        )
+
+        durationLabel.frame = CGRect(
+            x: bounds.width - labelWidth,
+            y: 0,
+            width: labelWidth,
+            height: bounds.height
+        )
+
+        // Slider between labels
         let sliderX = labelWidth + spacing
-        let sliderWidth = bounds.width - (labelWidth * 2) - (spacing * 2)
-        slider.frame = CGRect(x: sliderX, y: 0, width: sliderWidth, height: bounds.height)
-        
-        // Buffer progress (same as slider)
-        bufferProgressView.frame = CGRect(
+        let sliderWidth = max(0, bounds.width - labelWidth * 2 - spacing * 2)
+        slider.frame = CGRect(
             x: sliderX,
-            y: (bounds.height - 4) / 2,
+            y: 0,
             width: sliderWidth,
+            height: bounds.height
+        )
+
+        // Get the actual track rect from the slider
+        let track = slider.trackRect(forBounds: slider.bounds)
+
+        // Draw the gray buffer bar exactly where the real track is
+        bufferProgressView.frame = CGRect(
+            x: sliderX + track.origin.x,
+            y: track.midY - 2,               // centered on track (4pt height)
+            width: track.width,
             height: 4
         )
+        repositionPreview()
     }
-    
+
+    private func repositionPreview() {
+        guard let superview = previewView.superview else { return }
+
+        // Convert slider frame from seekbar to superview (playerViewController.view)
+        let sliderFrameInSuperview = superview.convert(slider.frame, from: self)
+
+        let progress = CGFloat(
+            (slider.maximumValue == slider.minimumValue)
+            ? 0
+            : (slider.value - slider.minimumValue) / (slider.maximumValue - slider.minimumValue)
+        )
+
+        let thumbCenterX = sliderFrameInSuperview.minX + progress * sliderFrameInSuperview.width
+
+        let previewSize = previewView.bounds.size
+        guard previewSize.width > 0, previewSize.height > 0 else { return }
+
+        var previewX = thumbCenterX - previewSize.width / 2
+        let minX: CGFloat = 8
+        let maxX = superview.bounds.width - previewSize.width - 8
+
+        // Clamp so it never goes negative or off screen
+        previewX = max(minX, min(maxX, previewX))
+
+        var previewY = sliderFrameInSuperview.minY - previewSize.height - 8
+        if previewY < 0 { previewY = 8 }
+
+        previewView.frame = CGRect(
+            x: previewX,
+            y: previewY,
+            width: previewSize.width,
+            height: previewSize.height
+        )
+    }
+
     // MARK: - Slider Actions
     @objc private func sliderTouchDown() {
         isDragging = true
-        onSeekStart?(TimeInterval(slider.value))
+        let time = TimeInterval(slider.value)
+        onSeekStart?(time)
+        setPreviewVisible(true, time: time)
+        setNeedsLayout()
     }
     
     @objc private func sliderValueChanged() {
         if isDragging {
             let time = TimeInterval(slider.value)
             currentTimeLabel.text = formatTime(time)
+            onPreviewScrub?(time)
+            setPreviewVisible(true, time: time)
+            setNeedsLayout()
         }
     }
     
@@ -128,10 +208,26 @@ public class FastPixSeekBar: UIView {
         isDragging = false
         let seekTime = TimeInterval(slider.value)
         onSeekEnd?(seekTime)
+        setPreviewVisible(false, time: seekTime)
+        setNeedsLayout()
     }
     
     public func endDraggingAndReset() {
         isDragging = false
+    }
+    
+    private func setPreviewVisible(_ visible: Bool, time: TimeInterval) {
+        
+        guard isPreviewVisible != visible else {
+            if visible {
+                onPreviewVisibilityChanged?(true, time)
+            }
+            return
+        }
+        
+        isPreviewVisible = visible
+        previewView.isHidden = !visible
+        onPreviewVisibilityChanged?(visible, time)
     }
     
     // MARK: - Public Update Methods
@@ -187,8 +283,6 @@ extension FastPixSeekBar {
     
     public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
-        
-        // Adjust layout for orientation change
         setNeedsLayout()
         layoutIfNeeded()
     }
@@ -209,11 +303,100 @@ extension FastPixSeekBar {
         if let dur = state["duration"] as? TimeInterval {
             duration = dur
         }
-        // Update the UI with restored values
+        
         if !isDragging {
             slider.value = duration > 0 ? Float(currentTime / duration) : 0
             currentTimeLabel.text = formatTime(currentTime)
             durationLabel.text = formatTime(duration)
+        }
+    }
+}
+
+public final class FastPixSeekPreviewView: UIView {
+
+    let imageView = UIImageView()
+    let label = UILabel()
+
+    /// Fixed label height
+    private let labelHeight: CGFloat = 24
+
+    
+    var imageSize: CGSize = .zero {
+        didSet { invalidateIntrinsicContentSize() }
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setup()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+
+    private func setup() {
+        backgroundColor = .clear
+        layer.cornerRadius = 4
+        clipsToBounds = true
+
+        // ⚠️ Use AspectFit so full image is visible, no cropping
+        imageView.contentMode = .scaleAspectFit
+        imageView.clipsToBounds = true
+        addSubview(imageView)
+
+        label.font = .systemFont(ofSize: 12, weight: .medium)
+        label.textColor = .white
+        label.textAlignment = .center
+        label.numberOfLines = 1
+        label.backgroundColor = .clear
+        addSubview(label)
+    }
+
+    // Total intrinsic size = image + label(24)
+    public override var intrinsicContentSize: CGSize {
+        guard imageSize != .zero else { return .zero }
+        return CGSize(width: imageSize.width,
+                      height: imageSize.height + labelHeight)
+    }
+
+    public override func layoutSubviews() {
+        super.layoutSubviews()
+
+        // 1. Image gets the full area above the label
+        let imageFrame = CGRect(
+            x: 0,
+            y: 0,
+            width: bounds.width,
+            height: bounds.height - labelHeight
+        )
+        imageView.frame = imageFrame
+
+        // 2. Label is fixed 24pt bar at bottom
+        label.frame = CGRect(
+            x: 0,
+            y: bounds.height - labelHeight,
+            width: bounds.width,
+            height: labelHeight
+        )
+    }
+    
+}
+
+extension FastPixSeekBar {
+   
+    public func updatePreviewThumbnail(_ image: UIImage?, time: TimeInterval, useTimestamp: Bool) {
+        if let image, !useTimestamp {
+            // ✅ Show image + timestamp
+            previewView.imageView.image = image
+            previewView.imageView.isHidden = false
+            previewView.label.isHidden = false  // 🔹 MAKE SURE LABEL IS VISIBLE
+            previewView.label.text = formatTime(time)
+        } else {
+            // ✅ Show only timestamp (no image)
+            previewView.imageView.isHidden = true
+            previewView.label.isHidden = false  // 🔹 LABEL MUST BE VISIBLE
+            previewView.label.text = formatTime(time)
         }
     }
 }

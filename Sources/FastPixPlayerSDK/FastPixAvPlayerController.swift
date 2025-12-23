@@ -77,6 +77,76 @@ public class FastPixPlaylistManager {
     }
 }
 
+private struct FastPixLayerKeys {
+    static var playerLayer = "fastpix_player_layer"
+}
+
+private struct FastPixPiPConfigKey {
+    static var pipEnabled = "fastpix_pip_enabled"
+}
+
+extension AVPlayerViewController {
+    
+    private var fastpixInternalLayer: AVPlayerLayer? {
+        get {
+            objc_getAssociatedObject(self, &FastPixLayerKeys.playerLayer) as? AVPlayerLayer
+        }
+        set {
+            objc_setAssociatedObject(self,
+                                     &FastPixLayerKeys.playerLayer,
+                                     newValue,
+                                     .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+    }
+    
+    /// SDK-level switch to allow/disallow PiP for this player.
+    public var enablePiP: Bool {
+        get {
+            (objc_getAssociatedObject(self, &FastPixPiPConfigKey.pipEnabled) as? Bool) ?? true
+        }
+        set {
+            objc_setAssociatedObject(self,
+                                     &FastPixPiPConfigKey.pipEnabled,
+                                     newValue,
+                                     .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            
+            // Propagate to existing manager if already created
+            allowsPictureInPicturePlayback = newValue ?? true
+            if #available(iOS 14.2, *) {
+                canStartPictureInPictureAutomaticallyFromInline = newValue ?? true
+            } else {
+                // Fallback on earlier versions
+            }
+            fastPixPiPManager?.isEnabled = newValue
+            
+            if newValue == false {
+                // If disabling, stop any running PiP and mark unavailable
+                fastPixPiPManager?.exitPiP()
+                NotificationCenter.default.post(
+                    name: Notification.Name("FastPixPiPAvailabilityChangedNotification"),
+                    object: self,
+                    userInfo: ["isAvailable": false]
+                )
+            }
+        }
+    }
+    
+    func fastpix_attachPlayerLayerIfNeeded() {
+        guard let player = player else { return }
+        if fastpixInternalLayer != nil { return }
+        
+        let layer = AVPlayerLayer(player: player)
+        layer.videoGravity = .resizeAspect
+        layer.frame = view.bounds
+        view.layer.insertSublayer(layer, at: 0)
+        fastpixInternalLayer = layer
+    }
+    
+    public var fastpixPlayerLayer: AVPlayerLayer? {
+        return fastpixInternalLayer
+    }
+}
+
 // MARK: - Auto-Play Extension
 extension AVPlayerViewController {
     
@@ -170,8 +240,18 @@ extension AVPlayerViewController {
 
 private var playlistStorage: [ObjectIdentifier: FastPixPlaylistManager] = [:]
 
+private struct FastPixStallKeys {
+    static var lastStalledTime = "fastpix_last_stalled_time"
+}
+
 extension AVPlayerViewController {
-    
+    private var fastpixLastStalledTime: CMTime? {
+        get { objc_getAssociatedObject(self, &FastPixStallKeys.lastStalledTime) as? CMTime }
+        set { objc_setAssociatedObject(self, &FastPixStallKeys.lastStalledTime, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
+    }
+}
+
+extension AVPlayerViewController {
     
     /// Initializes an AVPlayerViewController that's configured
     /// back it's playback performance.
@@ -269,6 +349,7 @@ extension AVPlayerViewController {
     }
     
     internal func prepare(playerItem: AVPlayerItem) {
+        //        stopObservingCurrentItem()
         if let player {
             player.replaceCurrentItem(
                 with: playerItem
@@ -278,6 +359,108 @@ extension AVPlayerViewController {
                 playerItem: playerItem
             )
         }
+        observeItemStallAndFailure(playerItem)
+        seekManager?.refreshBufferObservation()
+    }
+    
+    private func observeItemStallAndFailure(_ item: AVPlayerItem) {
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePlaybackStalled(_:)),
+            name: .AVPlayerItemPlaybackStalled,
+            object: item
+        )
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleItemFailed(_:)),
+            name: .AVPlayerItemFailedToPlayToEndTime,
+            object: item
+        )
+    }
+    
+    @objc private func handlePlaybackStalled(_ notification: Notification) {
+        guard let player = player,
+              let item = notification.object as? AVPlayerItem,
+              item == player.currentItem else { return }
+        
+        fastpixLastStalledTime = player.currentTime()
+        NotificationCenter.default.post(
+            name: Notification.Name("PlaybackStalled"),
+            object: self
+        )
+        
+        retryResumePlaybackIfBuffering(player, attempt: 0)
+    }
+    
+    private func retryResumePlaybackIfBuffering(_ player: AVPlayer, attempt: Int) {
+        
+        let maxAttempts = 10   // e.g. ~20 seconds total
+            
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            guard let self else { return }
+            guard let currentItem = player.currentItem else {
+                return
+            }
+            if currentItem.isPlaybackLikelyToKeepUp {
+                self.fastpixLastStalledTime = nil
+                NotificationCenter.default.post(
+                    name: Notification.Name("PlaybackResumed"),
+                    object: self
+                )
+                player.play()
+                return
+            }
+            
+            if attempt + 1 >= maxAttempts {
+                self.reloadCurrentPlaylistItemAfterStall()
+                return
+            }
+            
+            self.retryResumePlaybackIfBuffering(player, attempt: attempt + 1)
+        }
+    }
+    
+    private func reloadCurrentPlaylistItemAfterStall() {
+        guard let stalledTime = fastpixLastStalledTime else {
+            loadCurrentPlaylistItem()
+            player?.play()
+            return
+        }
+        
+        loadCurrentPlaylistItem()   // rebuilds current item and calls prepare(...)
+        guard let player = player else { return }
+        
+        // Seek close to where we were (slightly earlier for safety)
+        let seconds = max(CMTimeGetSeconds(stalledTime) - 2.0, 0)
+        let target = CMTimeMakeWithSeconds(seconds, preferredTimescale: stalledTime.timescale)
+        
+        player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+            self?.fastpixLastStalledTime = nil
+            NotificationCenter.default.post(
+                name: Notification.Name("PlaybackResumed"),
+                object: self
+            )
+            self?.player?.play()
+        }
+    }
+    
+    @objc private func handleItemFailed(_ notification: Notification) {
+        guard let failedItem = notification.object as? AVPlayerItem else { return }
+        guard failedItem == player?.currentItem else { return }
+        
+        guard let player = player,
+              let item = notification.object as? AVPlayerItem,
+              item == player.currentItem else { return }
+        
+        // If we don’t already have a stalled time, capture current position
+        if fastpixLastStalledTime == nil {
+            fastpixLastStalledTime = player.currentTime()
+        }
+        
+        // Use the same logic you use for long stalls
+        retryResumePlaybackIfBuffering(player, attempt: 0)
     }
 }
 
@@ -355,7 +538,6 @@ extension AVPlayerViewController {
     public func next() -> Bool {
         guard let manager = playlistManager,
               let _ = manager.nextItem() else { return false }
-        print("Loading next item in the playlist")
         loadCurrentPlaylistItem()
         return true
     }
@@ -608,5 +790,248 @@ extension AVPlayerViewController {
     /// Seek backward
     public func seekBackward(by seconds: TimeInterval = 10) {
         seekManager?.seekBackward(by: seconds)
+    }
+}
+
+// MARK: - Fullscreen & PiP Extensions for AVPlayerViewController
+
+private struct FastPixAssociatedKeys {
+    static var fullscreenManager = "fastpix_fullscreen_manager"
+    static var pipManager = "fastpix_pip_manager"
+}
+
+extension AVPlayerViewController {
+    
+    // Fullscreen manager accessor (stored via associated object)
+    private var fastPixFullscreenManager: FastPixFullscreenManager? {
+        get {
+            return objc_getAssociatedObject(self, &FastPixAssociatedKeys.fullscreenManager) as? FastPixFullscreenManager
+        }
+        set {
+            objc_setAssociatedObject(self, &FastPixAssociatedKeys.fullscreenManager, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+    }
+    
+    // PiP manager accessor (stored via associated object)
+    private var fastPixPiPManager: FastPixPiPManager? {
+        get {
+            return objc_getAssociatedObject(self, &FastPixAssociatedKeys.pipManager) as? FastPixPiPManager
+        }
+        set {
+            objc_setAssociatedObject(self, &FastPixAssociatedKeys.pipManager, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+    }
+    
+    // MARK: - Fullscreen APIs
+    
+    /// Setup fullscreen support for this AVPlayerViewController.
+    /// - Parameters:
+    ///   - parent: the containing UIViewController (usually the VC that hosts this AVPlayerViewController)
+    ///   - container: the UIView that contains the player view and custom controls (playerView).
+    /// Note: Fullscreen manager moves `container` to a fullscreen UIWindow when toggled.
+    public func setupFullscreen(parent: UIViewController, container: UIView) {
+        let fs = FastPixFullscreenManager(playerView: container, parentViewController: parent)
+        fs.delegate = self
+        fastPixFullscreenManager = fs
+    }
+    
+    public func toggleFullscreen() {
+        fastPixFullscreenManager?.toggleFullscreen()
+    }
+    
+    public func enterFullscreen() {
+        fastPixFullscreenManager?.enterFullscreen()
+    }
+    
+    public func exitFullscreen() {
+        fastPixFullscreenManager?.exitFullscreen()
+    }
+    
+    public func isFullscreen() -> Bool {
+        return fastPixFullscreenManager?.isFullscreen() ?? false
+    }
+    
+    public func setFullscreenAutoRotate(enabled: Bool) {
+        fastPixFullscreenManager?.setFullscreenAutoRotate(enabled: enabled)
+    }
+    
+    public func setControlAutoHideTimeout(seconds: Double) {
+        fastPixFullscreenManager?.setControlAutoHideTimeout(seconds: seconds)
+    }
+    
+    // MARK: - PiP APIs
+    
+    public func setupPiP(parent: UIViewController) {
+        guard enablePiP else {
+            return
+        }
+        guard AVPictureInPictureController.isPictureInPictureSupported() else { return }
+        fastpix_attachPlayerLayerIfNeeded()
+        guard let realLayer = fastpixPlayerLayer else {
+            return
+        }
+        
+        let pipManager = FastPixPiPManager(playerLayer: realLayer, parent: parent)
+        pipManager.delegate = self
+        pipManager.isEnabled = enablePiP
+        fastPixPiPManager = pipManager
+        
+        NotificationCenter.default.post(
+            name: Notification.Name("FastPixPiPAvailabilityChangedNotification"),
+            object: self,
+            userInfo: ["isAvailable": pipManager.isPiPAvailable()]
+        )
+    }
+    
+    public func togglePiP() {
+        guard enablePiP else {
+            return
+        }
+        fastPixPiPManager?.togglePiP()
+    }
+    
+    public func enterPiP() {
+        fastPixPiPManager?.enterPiP()
+    }
+    
+    public func exitPiP() {
+        fastPixPiPManager?.exitPiP()
+    }
+    
+    public func isPiPAvailable() -> Bool {
+        return fastPixPiPManager?.isPiPAvailable() ?? false
+    }
+    
+    public func isPiPActive() -> Bool {
+        return fastPixPiPManager?.isPiPActive() ?? false
+    }
+    
+    public func setPiPAudioBehavior(mixWithOthers: Bool) {
+        fastPixPiPManager?.setPiPAudioBehavior(mixWithOthers: mixWithOthers)
+    }
+}
+
+// MARK: - FastPixFullscreenDelegate & FastPixPiPDelegate bridging
+extension AVPlayerViewController: FastPixFullscreenDelegate, FastPixPiPDelegate {
+    
+    // Fullscreen
+    public func onFullscreenEnter() {
+        NotificationCenter.default.post(name: Notification.Name("FastPixFullscreenDidEnterNotification"), object: self)
+    }
+    
+    public func onFullscreenExit() {
+        NotificationCenter.default.post(name: Notification.Name("FastPixFullscreenDidExitNotification"), object: self)
+    }
+    
+    public func onFullscreenStateChanged(isFullscreen: Bool) {
+        NotificationCenter.default.post(name: Notification.Name("FastPixFullscreenStateChangedNotification"),
+                                        object: self,
+                                        userInfo: ["isFullscreen": isFullscreen])
+    }
+    
+    public func onFullscreenOrientationChanged(isLandscape: Bool) {
+        // provide a notification if consumers care about orientation while in fullscreen
+        NotificationCenter.default.post(name: Notification.Name("FastPixFullscreenOrientationChangedNotification"),
+                                        object: self,
+                                        userInfo: ["isLandscape": isLandscape])
+    }
+    
+    // PiP
+    public func onPiPEnter() {
+        NotificationCenter.default.post(name: Notification.Name("FastPixPiPDidEnterNotification"), object: self)
+    }
+    
+    public func onPiPExit() {
+        NotificationCenter.default.post(name: Notification.Name("FastPixPiPDidExitNotification"), object: self)
+    }
+    
+    public func onPiPStateChanged(isActive: Bool) {
+        NotificationCenter.default.post(name: Notification.Name("FastPixPiPStateChangedNotification"),
+                                        object: self,
+                                        userInfo: ["isActive": isActive])
+    }
+    
+    public func onPiPAvailabilityChanged(isAvailable: Bool) {
+        NotificationCenter.default.post(name: Notification.Name("FastPixPiPAvailabilityChangedNotification"),
+                                        object: self,
+                                        userInfo: ["isAvailable": isAvailable])
+    }
+    
+    public func onPiPSessionError(error: Error) {
+        NotificationCenter.default.post(name: Notification.Name("FastPixPiPSessionErrorNotification"),
+                                        object: self,
+                                        userInfo: ["error": error])
+    }
+}
+
+extension AVPlayerViewController {
+    
+    private static var spritesheetManagerKey = "FastPixSpritesheetManagerKey"
+    
+    // Make this private, not public
+    public var fastpixSpritesheetManager: FastPixSpritesheetManager? {
+        get {
+            objc_getAssociatedObject(self, &Self.spritesheetManagerKey) as? FastPixSpritesheetManager
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &Self.spritesheetManagerKey,
+                newValue,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
+    
+    // MARK: - Public Spritesheet API
+    
+    public func loadSpritesheet(
+        url: URL? = nil,
+        previewEnable: Bool = true,
+        config: FastPixSeekPreviewConfig
+    ) {
+        guard previewEnable else {
+            fastpixSpritesheetManager?.previewMode = .timestamp
+            return
+        }
+        if fastpixSpritesheetManager == nil {
+            fastpixSpritesheetManager = FastPixSpritesheetManager(player: player)
+        }
+        fastpixSpritesheetManager?.load(url: url, config: config)
+    }
+    
+    public func setFallbackMode(_ mode: FastPixPreviewFallbackMode) {
+        if fastpixSpritesheetManager == nil {
+            fastpixSpritesheetManager = FastPixSpritesheetManager(player: player)
+        }
+        fastpixSpritesheetManager?.setFallbackMode(mode)
+    }
+    
+    public func clearSpritesheet() {
+        fastpixSpritesheetManager?.clearCache()
+        fastpixSpritesheetManager?.previewMode = .timestamp
+    }
+    
+    public func getCurrentPreviewMode() -> FastPixPreviewMode {
+        return fastpixSpritesheetManager?.previewMode ?? .timestamp
+    }
+    
+    public func fastpixThumbnailForPreview(at time: TimeInterval) -> (image: UIImage?, useTimestamp: Bool) {
+        guard let manager = fastpixSpritesheetManager else {
+            return (nil, true) // no manager -> timestamp
+        }
+        
+        switch manager.previewMode {
+        case .thumbnail:
+            if let image = manager.thumbnail(for: time) {
+                return (image, false)
+            } else {
+                // fallback decision
+                return (nil, manager.fallbackMode == .timestamp)
+            }
+            
+        case .timestamp:
+            return (nil, manager.fallbackMode == .timestamp)
+        }
     }
 }
