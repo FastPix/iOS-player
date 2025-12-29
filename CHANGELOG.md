@@ -3,6 +3,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0]
+
+- **Picture-in-Picture (PiP)**  
+  - Enable PiP with `enablePiP = true`.  
+  - Check state via `isPiPAvailable` and `isPiPActive`.  
+  - Toggle with `togglePiP()` and observe via `FastPixPiPStateChangedNotification`.
+- **Full-Screen Mode**  
+  - Smooth inline ↔ full-screen transitions using `FastPixFullscreenManager`.  
+  - Configure layout with `configureConstraints(normal:fullscreen:)`.  
+  - Observe state via `FastPixFullscreenStateChangedNotification`.
+- **Spritesheet & Timeline Preview**  
+  - Show thumbnails on seek bar with `loadSpritesheet(url:previewEnable:config:)`.  
+  - Clear with `clearSpritesheet()`.  
+  - Fall back to timestamp-only preview with `setFallbackMode(.timestamp)`.
+
 ## [0.4.0]
 
 - FastPix iOS Player now supports fully customizable player controls.
