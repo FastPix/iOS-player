@@ -520,6 +520,94 @@ private func isLandscapeMode() -> Bool {
 }
 ```
 
+### Picture-in-Picture (PiP): 
+
+FastPix Player supports system Picture-in-Picture (PiP) on iOS 14+, allowing playback to continue when the app goes to background.
+
+#### Enable PiP:
+```swift
+playerViewController.enablePiP = true
+playerViewController.setupPiP(parent: self)
+```
+
+#### Start / Stop PiP: 
+```swift
+playerViewController.togglePiP()
+```
+
+#### Handle PiP active state : 
+```swift
+if playerViewController.isPiPActive() {
+    return
+}
+```
+
+#### Observe PiP state changes : 
+```swift 
+FastPixPiPStateChangedNotification
+FastPixPiPAvailabilityChangedNotification
+```
+
+##### Note: 
+
+- Call setupPiP(parent:) after the view appears
+- Do not release the player while PiP is active
+
+### Full-Screen Functionality:
+
+FastPix provides a built-in full-screen manager for smooth inline ↔ full-screen transitions.
+
+#### Setup Full-Screen :
+```swift 
+playerViewController.setupFullscreen(
+    parent: self,
+    container: playerView
+)
+```
+
+#### Toggle Full-Screen :
+```swift
+playerViewController.toggleFullscreen()
+```
+
+#### Full-Screen State Updates: 
+```swift
+Notification.Name("FastPixFullscreenStateChangedNotification")
+```
+
+### Seek Bar Thumbnail Preview (Spritesheet): 
+
+FastPix supports spritesheet-based thumbnail previews while scrubbing the seek bar.
+
+#### Enable Spritesheet Preview :
+```swift 
+let previewConfig = FastPixSeekPreviewConfig()
+
+playerViewController.loadSpritesheet(
+    url: nil,
+    previewEnable: true,
+    config: previewConfig
+)
+
+playerViewController.setFallbackMode(.timestamp)
+```
+
+#### Get Preview During Scrubbing : 
+```swift 
+let result = playerViewController.fastpixThumbnailForPreview(at: time)
+
+seekBar.updatePreviewThumbnail(
+    result.image,
+    time: time,
+    useTimestamp: result.useTimestamp
+)
+```
+
+##### Note : 
+
+- Automatically falls back to timestamp if thumbnail is unavailable
+- Works with playlists and custom seek bars
+
 #### Each of these features is designed to enhance both flexibility and user experience, providing complete control over video playback, appearance, and user interactions in FastPix-player.
 
 # Supporting tvOS
