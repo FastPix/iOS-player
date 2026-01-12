@@ -124,12 +124,12 @@ public final class FastPixSpritesheetManager {
             previewMode = .timestamp
             return
         }
-            
+        
         guard let playbackID = extractPlaybackID(from: assetURL) else {
             previewMode = .timestamp
             return
         }
-            
+        
         //Choose images host based on stream host
         let imagesHost: String
         switch assetURL.host {
@@ -228,7 +228,7 @@ extension FastPixSpritesheetManager {
     private func loadCustomSpritesheet(from url: URL) {
         queue.async { [weak self] in
             guard let self = self else { return }
-                        
+            
             do {
                 let jsonData = try Data(contentsOf: url)
                 
@@ -278,7 +278,7 @@ extension FastPixSpritesheetManager {
                     throw NSError(domain: "FastPixSpritesheet", code: 2,
                                   userInfo: [NSLocalizedDescriptionKey: "No image data received"])
                 }
-                                
+                
                 guard let image = UIImage(data: imageData) else {
                     throw NSError(domain: "FastPixSpritesheet", code: 3,
                                   userInfo: [NSLocalizedDescriptionKey: "Failed to decode spritesheet image"])
@@ -318,7 +318,7 @@ extension FastPixSpritesheetManager {
             }
         }
     }
-
+    
     // Optional: local generation fallback (not needed if FastPix always has spritesheet)
     func generateSpritesheet(config: FastPixSeekPreviewConfig) {
         // For FastPix, you usually rely on server-side spritesheet.

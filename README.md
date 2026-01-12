@@ -608,6 +608,29 @@ seekBar.updatePreviewThumbnail(
 - Automatically falls back to timestamp if thumbnail is unavailable
 - Works with playlists and custom seek bars
 
+### Forward & Rewind Controls : 
+
+FastPix iOS Player SDK provides Forward and Rewind seek controls functionality that integrates with AVPlayer and custom player UIs. These controls are designed to work reliably alongside a custom seekbar, gestures, and auto-hide logic.
+
+#### Configure Forward & Rewind Controls : 
+
+You can enable forward and rewind buttons and configure their seek increments separately for portrait and landscape modes.
+
+```swift
+playerViewController.configureSeekButtons(
+    enablePortrait: true,
+    enableLandscape: true,
+    forwardIncrement: 10,   // Customizable
+    backwardIncrement: 10  // Customizable
+)
+```
+#### Behavior & State Handling : 
+- Forward and rewind actions are fully synchronized with the player’s internal playback state.
+- Controls are automatically disabled during active seek bar scrubbing to prevent conflicting seek operations.
+- Auto-hide logic is paused during forward/rewind interactions and resumes safely afterward.
+- Controls remain visible while users interact with forward or rewind buttons.
+- Works consistently across play, pause, buffering, playback end, fullscreen, inline, and Picture-in-Picture (PiP) modes.
+
 #### Each of these features is designed to enhance both flexibility and user experience, providing complete control over video playback, appearance, and user interactions in FastPix-player.
 
 # Supporting tvOS

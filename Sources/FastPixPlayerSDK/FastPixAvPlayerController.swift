@@ -153,7 +153,6 @@ extension AVPlayerViewController {
     private static var autoPlayObservers: [ObjectIdentifier: NSObjectProtocol] = [:]
     private static var autoPlayEnabled: [ObjectIdentifier: Bool] = [:]
     
-    
     public var isAutoPlayEnabled: Bool {
         get {
             let id = ObjectIdentifier(self)
@@ -302,7 +301,6 @@ extension AVPlayerViewController {
                 playbackOptions: playbackOptions
             )
         }
-        
         let player = AVPlayer(playerItem: playerItem)
         self.player = player
     }
@@ -396,8 +394,8 @@ extension AVPlayerViewController {
     
     private func retryResumePlaybackIfBuffering(_ player: AVPlayer, attempt: Int) {
         
-        let maxAttempts = 10   // e.g. ~20 seconds total
-            
+        let maxAttempts = 10
+        
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
             guard let self else { return }
             guard let currentItem = player.currentItem else {
@@ -731,7 +729,6 @@ extension AVPlayerViewController {
 extension AVPlayerViewController {
     
     // MARK: - Seek Manager Integration
-    
     private static var seekManagerKey = "FastPixSeekManager"
     
     public var seekManager: FastPixSeekManager? {
@@ -794,13 +791,332 @@ extension AVPlayerViewController {
 }
 
 // MARK: - Fullscreen & PiP Extensions for AVPlayerViewController
-
 private struct FastPixAssociatedKeys {
     static var fullscreenManager = "fastpix_fullscreen_manager"
     static var pipManager = "fastpix_pip_manager"
 }
 
+// MARK: - Forward / Backward Seek Config
+public enum FastPixPlayerOrientation {
+    case portrait
+    case landscape
+}
+
+private struct FastPixSeekButtonsConfig {
+    var enablePortrait: Bool = false
+    var enableLandscape: Bool = true
+    var forwardIncrement: TimeInterval = 10
+    var backwardIncrement: TimeInterval = 10
+    var enabled: Bool = true
+}
+
+private struct FastPixSeekButtonsKeys {
+    static var config = "FastPixSeekButtonsConfigKey"
+    static var forwardButton = "FastPixForwardButtonKey"
+    static var backwardButton = "FastPixBackwardButtonKey"
+    static var gesturesEnabled = "FastPixSeekGesturesEnabledKey"
+    static var featureEnabled = "FastPixSeekFeatureEnabledKey"
+}
+
 extension AVPlayerViewController {
+    
+    // MARK: - Forward / Backward Seek Associated Storage
+    private var fastpixSeekButtonsConfig: FastPixSeekButtonsConfig {
+        get {
+            (objc_getAssociatedObject(self, &FastPixSeekButtonsKeys.config) as? FastPixSeekButtonsConfig)
+            ?? FastPixSeekButtonsConfig()
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &FastPixSeekButtonsKeys.config,
+                newValue,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
+    
+    public var fastpixForwardButton: UIButton? {
+        get { objc_getAssociatedObject(self, &FastPixSeekButtonsKeys.forwardButton) as? UIButton }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &FastPixSeekButtonsKeys.forwardButton,
+                newValue,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
+    
+    public var fastpixBackwardButton: UIButton? {
+        get { objc_getAssociatedObject(self, &FastPixSeekButtonsKeys.backwardButton) as? UIButton }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &FastPixSeekButtonsKeys.backwardButton,
+                newValue,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
+    
+    private var fastpixSeekGesturesEnabled: Bool {
+        get {
+            (objc_getAssociatedObject(self, &FastPixSeekButtonsKeys.gesturesEnabled) as? Bool) ?? false
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &FastPixSeekButtonsKeys.gesturesEnabled,
+                newValue,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
+    
+    private var fastpixSeekFeatureEnabled: Bool {
+        get {
+            (objc_getAssociatedObject(self, &FastPixSeekButtonsKeys.featureEnabled) as? Bool) ?? false
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &FastPixSeekButtonsKeys.featureEnabled,
+                newValue,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
+    
+    // MARK: - Forward / Backward Seek Public API
+    public func configureSeekButtons(
+        enablePortrait: Bool,
+        enableLandscape: Bool,
+        forwardIncrement: TimeInterval,
+        backwardIncrement: TimeInterval
+    ) {
+        guard fastpixSeekFeatureEnabled else { return }
+        var config = fastpixSeekButtonsConfig
+        config.enablePortrait = enablePortrait
+        config.enableLandscape = enableLandscape
+        config.forwardIncrement = forwardIncrement
+        config.backwardIncrement = backwardIncrement
+        fastpixSeekButtonsConfig = config
+        fastpix_updateSeekButtonsVisibilityForCurrentOrientation()
+    }
+    
+    /// setSeekIncrement(forward: TimeInterval, backward: TimeInterval)
+    public func setSeekIncrement(forward: TimeInterval, backward: TimeInterval) {
+        guard fastpixSeekFeatureEnabled else { return }
+        var config = fastpixSeekButtonsConfig
+        config.forwardIncrement = forward
+        config.backwardIncrement = backward
+        fastpixSeekButtonsConfig = config
+    }
+    
+    /// enableSeekButtons(enabled: Bool, orientation: PlayerOrientation?)
+    public func enableSeekButtons(enabled: Bool, orientation: FastPixPlayerOrientation? = nil) {
+        guard fastpixSeekFeatureEnabled else { return }
+        var config = fastpixSeekButtonsConfig
+        config.enabled = enabled
+        fastpixSeekButtonsConfig = config
+        fastpix_updateSeekButtonsVisibility(for: orientation)
+    }
+    
+    /// enableGestures() – YouTube-style double-tap
+    public func enableGestures() {
+        fastpixSeekFeatureEnabled = true      // <- add this line
+        fastpixSeekGesturesEnabled = true
+        //        fastpix_setupSeekGesturesIfNeeded()
+    }
+    
+    // MARK: - Forward / Backward Seek Logic (uses FastPixSeekManager)
+    private func fastpix_ensureSeekManager() {
+        if seekManager == nil, let player = player {
+            let manager = FastPixSeekManager(player: player)
+            seekManager = manager
+        }
+    }
+    
+    @objc private func fastpix_onForwardSeekTapped() {
+        guard fastpixSeekButtonsConfig.enabled else { return }
+        fastpix_ensureSeekManager()
+        seekManager?.seekForward(by: fastpixSeekButtonsConfig.forwardIncrement)
+    }
+    
+    @objc private func fastpix_onBackwardSeekTapped() {
+        guard fastpixSeekButtonsConfig.enabled else { return }
+        fastpix_ensureSeekManager()
+        seekManager?.seekBackward(by: fastpixSeekButtonsConfig.backwardIncrement)
+    }
+
+    // MARK: - Seek Buttons UI
+    
+    /// Call once after player is ready to setup default forward/backward buttons.
+    public func setupDefaultSeekButtonsUI() {
+        guard fastpixSeekFeatureEnabled else { return }
+        guard fastpixForwardButton == nil, fastpixBackwardButton == nil else { return }
+        guard let overlay = contentOverlayView else { return }
+        
+        let forward = UIButton(type: .system)
+        let backward = UIButton(type: .system)
+        
+        // Replace titles with icons as needed
+        forward.setTitle("+10", for: .normal)
+        backward.setTitle("-10", for: .normal)
+        
+        forward.tintColor = .white
+        backward.tintColor = .white
+        
+        forward.addTarget(self, action: #selector(fastpix_onForwardSeekTapped), for: .touchUpInside)
+        backward.addTarget(self, action: #selector(fastpix_onBackwardSeekTapped), for: .touchUpInside)
+        
+        fastpixForwardButton = forward
+        fastpixBackwardButton = backward
+        
+        overlay.addSubview(forward)
+        overlay.addSubview(backward)
+        
+        forward.translatesAutoresizingMaskIntoConstraints = false
+        backward.translatesAutoresizingMaskIntoConstraints = false
+        
+        NSLayoutConstraint.activate([
+            forward.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
+            backward.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
+            
+            forward.leadingAnchor.constraint(equalTo: overlay.centerXAnchor, constant: 60),
+            backward.trailingAnchor.constraint(equalTo: overlay.centerXAnchor, constant: -60)
+        ])
+        
+        fastpix_updateSeekButtonsVisibilityForCurrentOrientation()
+    }
+    
+    private func fastpix_updateSeekButtonsVisibilityForCurrentOrientation() {
+        let isLandscape = view.bounds.width > view.bounds.height
+        let orientation: FastPixPlayerOrientation = isLandscape ? .landscape : .portrait
+        fastpix_updateSeekButtonsVisibility(for: orientation)
+    }
+    
+    private func fastpix_updateSeekButtonsVisibility(for orientation: FastPixPlayerOrientation?) {
+        let config = fastpixSeekButtonsConfig
+        guard let f = fastpixForwardButton, let b = fastpixBackwardButton else { return }
+        
+        // DEBUG: always show while debugging
+        f.isHidden = !config.enabled
+        b.isHidden = !config.enabled
+        f.isEnabled = config.enabled
+        b.isEnabled = config.enabled
+    }
+    
+    public func fastpix_setupSeekButtons() {
+        fastpixSeekFeatureEnabled = true    // force feature ON
+        
+        guard let overlay = contentOverlayView else { return }
+        
+        // Always remove old buttons and recreate to avoid weird state
+        fastpixForwardButton?.removeFromSuperview()
+        fastpixBackwardButton?.removeFromSuperview()
+        fastpixForwardButton = nil
+        fastpixBackwardButton = nil
+        
+        let forward = UIButton(type: .system)
+        let backward = UIButton(type: .system)
+        
+        let forwardImage: UIImage?
+        let backwardImage: UIImage?
+        
+        if #available(iOS 13.0, *) {
+            let symbolConfig = UIImage.SymbolConfiguration(pointSize: 22, weight: .bold)
+            forwardImage = UIImage(systemName: "goforward.10", withConfiguration: symbolConfig)
+            backwardImage = UIImage(systemName: "gobackward.10", withConfiguration: symbolConfig)
+        } else {
+            forwardImage = nil
+            backwardImage = nil
+        }
+        
+        forward.setImage(forwardImage, for: .normal)
+        backward.setImage(backwardImage, for: .normal)
+        
+        forward.tintColor = .white
+        backward.tintColor = .white
+        forward.backgroundColor = UIColor.black.withAlphaComponent(0.5)
+        backward.backgroundColor = UIColor.black.withAlphaComponent(0.5)
+        forward.layer.cornerRadius = 24
+        backward.layer.cornerRadius = 24
+        forward.clipsToBounds = true
+        backward.clipsToBounds = true
+        
+        forward.setTitle(nil, for: .normal)
+        backward.setTitle(nil, for: .normal)
+        
+        forward.addTarget(self, action: #selector(fastpix_onForwardSeekTapped), for: .touchUpInside)
+        backward.addTarget(self, action: #selector(fastpix_onBackwardSeekTapped), for: .touchUpInside)
+        
+        fastpixForwardButton = forward
+        fastpixBackwardButton = backward
+        
+        overlay.addSubview(forward)
+        overlay.addSubview(backward)
+        
+        forward.translatesAutoresizingMaskIntoConstraints = false
+        backward.translatesAutoresizingMaskIntoConstraints = false
+        
+        NSLayoutConstraint.activate([
+            forward.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
+            backward.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
+            
+            forward.widthAnchor.constraint(equalToConstant: 48),
+            forward.heightAnchor.constraint(equalToConstant: 48),
+            backward.widthAnchor.constraint(equalToConstant: 48),
+            backward.heightAnchor.constraint(equalToConstant: 48),
+            
+            forward.leadingAnchor.constraint(equalTo: overlay.centerXAnchor, constant: 70),
+            backward.trailingAnchor.constraint(equalTo: overlay.centerXAnchor, constant: -70)
+        ])
+        
+        var config = fastpixSeekButtonsConfig
+        config.enabled = true
+        fastpixSeekButtonsConfig = config
+    }
+    
+    public func enableSeekGestures(on view: UIView,
+                                   forwardSeconds: TimeInterval = 10,
+                                   backwardSeconds: TimeInterval = 10) {
+        fastpixSeekFeatureEnabled = true
+        fastpixSeekGesturesEnabled = true
+        
+        var config = fastpixSeekButtonsConfig
+        config.forwardIncrement = forwardSeconds
+        config.backwardIncrement = backwardSeconds
+        config.enabled = true
+        fastpixSeekButtonsConfig = config
+        
+        let doubleTap = UITapGestureRecognizer(
+            target: self,
+            action: #selector(fastpix_handleSeekDoubleTap)
+        )
+        doubleTap.numberOfTapsRequired = 2
+        doubleTap.cancelsTouchesInView = false
+        
+        view.addGestureRecognizer(doubleTap)
+    }
+    
+    @objc private func fastpix_handleSeekDoubleTap(_ gesture: UITapGestureRecognizer) {
+        guard let hostView = gesture.view else { return }
+        
+        let location = gesture.location(in: hostView)
+        let midX = hostView.bounds.midX
+                
+        fastpix_ensureSeekManager()
+        
+        if location.x < midX {
+            // Left half → backward
+            seekManager?.seekBackward(by: fastpixSeekButtonsConfig.backwardIncrement)
+        } else {
+            // Right half → forward
+            seekManager?.seekForward(by: fastpixSeekButtonsConfig.forwardIncrement)
+        }
+    }
     
     // Fullscreen manager accessor (stored via associated object)
     private var fastPixFullscreenManager: FastPixFullscreenManager? {
@@ -860,7 +1176,6 @@ extension AVPlayerViewController {
     }
     
     // MARK: - PiP APIs
-    
     public func setupPiP(parent: UIViewController) {
         guard enablePiP else {
             return
@@ -934,9 +1249,10 @@ extension AVPlayerViewController: FastPixFullscreenDelegate, FastPixPiPDelegate 
         NotificationCenter.default.post(name: Notification.Name("FastPixFullscreenOrientationChangedNotification"),
                                         object: self,
                                         userInfo: ["isLandscape": isLandscape])
+        // NEW: update seek buttons visibility based on current bounds/orientation
+        fastpix_updateSeekButtonsVisibilityForCurrentOrientation()
     }
     
-    // PiP
     public func onPiPEnter() {
         NotificationCenter.default.post(name: Notification.Name("FastPixPiPDidEnterNotification"), object: self)
     }

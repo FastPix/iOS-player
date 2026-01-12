@@ -3,6 +3,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0]
+
+- **Forward & Rewind Controls**
+  - Added configurable seek increments via: `configureSeekButtons(enablePortrait:enableLandscape:forwardIncrement:backwardIncrement:)`
+  - Forward and rewind actions are fully synchronized with the player’s internal playback state and are automatically disabled during active seek bar scrubbing to prevent conflicting seeks.
+  - Improved user interaction handling — controls remain visible during forward/rewind interactions, and auto-hide logic pauses during seek actions and resumes safely afterward
+
 ## [0.5.0]
 
 - **Picture-in-Picture (PiP)**  
