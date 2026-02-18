@@ -34,7 +34,6 @@ public  class FastPixFullscreenManager {
     }
     
     // MARK: - Public Methods
-    
     public func configureConstraints(normal: [NSLayoutConstraint],
                                      fullscreen: [NSLayoutConstraint]) {
         normalConstraints = normal

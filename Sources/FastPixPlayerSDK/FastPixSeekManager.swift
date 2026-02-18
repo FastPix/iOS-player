@@ -27,6 +27,8 @@ public class FastPixSeekManager: NSObject{
     private var enableStartTimeResumeFlag = false
     public var shouldResumeAfterSeek = false
     
+    private weak var playbackRateManager: FastPixPlaybackRateManager?
+    
     public init(player: AVPlayer) {
         super.init()
         self.player = player
@@ -92,6 +94,7 @@ public class FastPixSeekManager: NSObject{
     }
     
     public func seekTo(time: TimeInterval, completion: ((Bool) -> Void)? = nil) {
+        
         guard let player = player else {
             completion?(false)
             return
@@ -118,7 +121,8 @@ public class FastPixSeekManager: NSObject{
             self?.delegate?.onSeekEnd(at: time)
             
             if self?.shouldResumeAfterSeek == true {
-                player.play()
+                let storedRate = self?.playbackRateManager?.currentRate() ?? 1.0
+                player.playImmediately(atRate: storedRate)
             } else {
                 player.pause()
             }
@@ -156,11 +160,9 @@ public class FastPixSeekManager: NSObject{
             
             guard let timeRange = item.loadedTimeRanges.first?.timeRangeValue else { return }
             
-            // loadedTime = start + duration of the first buffered range
+            
             let loadedTime = CMTimeGetSeconds(timeRange.start) + CMTimeGetSeconds(timeRange.duration)
             let duration = getDuration()
-            
-            // Send update to delegate
             delegate?.onBufferedTimeUpdate(loaded: loadedTime, duration: duration)
         }
     }

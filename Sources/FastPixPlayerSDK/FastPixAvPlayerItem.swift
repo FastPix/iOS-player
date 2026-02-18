@@ -51,7 +51,6 @@ internal extension URLComponents {
             )
             self.queryItems = queryItems
         }
-        
     }
 }
 

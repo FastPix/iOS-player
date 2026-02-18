@@ -7,6 +7,12 @@ public protocol FastPixPlayerDelegate: AnyObject {
     func playerDidPause(_ player: AVPlayerViewController)
     func playerDidFinish(_ player: AVPlayerViewController)
     func playerDidFail(_ player: AVPlayerViewController, error: Error)
+    
+    // New Features
+    func onVolumeChanged(_ player: AVPlayerViewController, volume: Float)
+    func onMute(_ player: AVPlayerViewController, isMuted: Bool)
+    func onPlaybackRateChanged(_ player: AVPlayerViewController, rate: Float)
+    func onCompleted(_ player: AVPlayerViewController)
 }
 
 //MARK: - Playlist Classes
@@ -85,6 +91,28 @@ private struct FastPixPiPConfigKey {
     static var pipEnabled = "fastpix_pip_enabled"
 }
 
+private struct FastPixLoopKey {
+    static var isLoopEnabled = "fastpix_is_loop_enabled"
+}
+
+extension AVPlayerViewController {
+    
+    public var isLoopEnabled: Bool {
+        get {
+            (objc_getAssociatedObject(self, &FastPixLoopKey.isLoopEnabled) as? Bool) ?? false
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &FastPixLoopKey.isLoopEnabled,
+                newValue,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
+    
+}
+
 extension AVPlayerViewController {
     
     private var fastpixInternalLayer: AVPlayerLayer? {
@@ -161,12 +189,6 @@ extension AVPlayerViewController {
         set {
             let id = ObjectIdentifier(self)
             Self.autoPlayEnabled[id] = newValue
-            
-            if newValue {
-                setupAutoPlayObserver()
-            } else {
-                removeAutoPlayObserver()
-            }
         }
     }
     
@@ -347,7 +369,6 @@ extension AVPlayerViewController {
     }
     
     internal func prepare(playerItem: AVPlayerItem) {
-        //        stopObservingCurrentItem()
         if let player {
             player.replaceCurrentItem(
                 with: playerItem
@@ -357,6 +378,15 @@ extension AVPlayerViewController {
                 playerItem: playerItem
             )
         }
+        
+        //playbackrate
+        if fastpixPlaybackRateManager == nil {
+            fastpixPlaybackRateManager = FastPixPlaybackRateManager(player: player)
+        } else {
+            fastpixPlaybackRateManager?.attach(player: player)
+        }
+        setupVolumeManager()
+        setupEndObserver()
         observeItemStallAndFailure(playerItem)
         seekManager?.refreshBufferObservation()
     }
@@ -388,7 +418,6 @@ extension AVPlayerViewController {
             name: Notification.Name("PlaybackStalled"),
             object: self
         )
-        
         retryResumePlaybackIfBuffering(player, attempt: 0)
     }
     
@@ -407,7 +436,7 @@ extension AVPlayerViewController {
                     name: Notification.Name("PlaybackResumed"),
                     object: self
                 )
-                player.play()
+                self.play()
                 return
             }
             
@@ -426,7 +455,6 @@ extension AVPlayerViewController {
             player?.play()
             return
         }
-        
         loadCurrentPlaylistItem()   // rebuilds current item and calls prepare(...)
         guard let player = player else { return }
         
@@ -440,7 +468,7 @@ extension AVPlayerViewController {
                 name: Notification.Name("PlaybackResumed"),
                 object: self
             )
-            self?.player?.play()
+            self?.play()
         }
     }
     
@@ -513,7 +541,6 @@ extension AVPlayerViewController {
             nextButton?.isHidden = true
             return
         }
-        
         // Update based on playlist navigation state
         prevButton?.isHidden = !canGoPrevious
         nextButton?.isHidden = !canGoNext
@@ -584,7 +611,7 @@ extension AVPlayerViewController {
         
         guard let current = playlistManager?.currentItem else { return }
         
-        var options = PlaybackOptions()                // start with defaults
+        var options = PlaybackOptions()
         
         
         if !current.customDomain.isEmpty {
@@ -614,12 +641,14 @@ extension AVPlayerViewController {
             playbackID: current.playbackId,
             playbackOptions: options
         )
-        
         DispatchQueue.main.async { [weak self] in
-            self?.player?.play()
+            guard let self else { return }
+            
+            if self.isAutoPlayEnabled || self.isLoopEnabled {
+                self.play()
+            }
         }
     }
-    
     /// Clean up playlist storage and auto-play
     public func cleanupPlaylist() {
         let id = ObjectIdentifier(self)
@@ -634,6 +663,10 @@ extension AVPlayerViewController {
     /// Starts or resumes playback
     public func play() {
         player?.play()
+        
+        //playbackrate
+        let rate = fastpixPlaybackRateManager?.currentRate() ?? 1.0
+        player?.rate = rate
     }
     
     /// Pauses playback at current position
@@ -703,7 +736,7 @@ extension AVPlayerViewController {
         set {
             objc_setAssociatedObject(self, &Self.delegateKey, newValue, .OBJC_ASSOCIATION_ASSIGN)
             if newValue != nil {
-                setupPlaybackObservers()
+                //                setupPlaybackObservers()
             }
         }
     }
@@ -721,8 +754,32 @@ extension AVPlayerViewController {
         )
     }
     
+    private func setupEndObserver() {
+        NotificationCenter.default.removeObserver(
+            self,
+            name: .AVPlayerItemDidPlayToEndTime,
+            object: player?.currentItem
+        )
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(playerDidFinishPlaying),
+            name: .AVPlayerItemDidPlayToEndTime,
+            object: player?.currentItem
+        )
+    }
+    
+    // Loop
     @objc private func playerDidFinishPlaying() {
-        fastPixDelegate?.playerDidFinish(self)
+        if isLoopEnabled {
+            player?.seek(to: .zero) { [weak self] _ in
+                self?.play()
+            }
+            return
+        } else {
+            fastPixDelegate?.playerDidFinish(self)
+            fastPixDelegate?.onCompleted(self)
+        }
     }
 }
 
@@ -796,6 +853,10 @@ private struct FastPixAssociatedKeys {
     static var pipManager = "fastpix_pip_manager"
 }
 
+private struct FastPixPlaybackRateKeys {
+    static var manager = "fastpix_playback_rate_manager"
+}
+
 // MARK: - Forward / Backward Seek Config
 public enum FastPixPlayerOrientation {
     case portrait
@@ -818,7 +879,42 @@ private struct FastPixSeekButtonsKeys {
     static var featureEnabled = "FastPixSeekFeatureEnabledKey"
 }
 
-extension AVPlayerViewController {
+private struct FastpixOverlayKeys {
+    static var leftOverlay = "fastpix.leftOverlay"
+    static var rightOverlay = "fastpix.rightOverlay"
+}
+
+
+extension AVPlayerViewController: UIGestureRecognizerDelegate {
+    
+    
+    var leftSeekOverlay: UIView? {
+        get {
+            objc_getAssociatedObject(self, &FastpixOverlayKeys.leftOverlay) as? UIView
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &FastpixOverlayKeys.leftOverlay,
+                newValue,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
+    
+    var rightSeekOverlay: UIView? {
+        get {
+            objc_getAssociatedObject(self, &FastpixOverlayKeys.rightOverlay) as? UIView
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &FastpixOverlayKeys.rightOverlay,
+                newValue,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
     
     // MARK: - Forward / Backward Seek Associated Storage
     private var fastpixSeekButtonsConfig: FastPixSeekButtonsConfig {
@@ -923,13 +1019,6 @@ extension AVPlayerViewController {
         fastpix_updateSeekButtonsVisibility(for: orientation)
     }
     
-    /// enableGestures() – YouTube-style double-tap
-    public func enableGestures() {
-        fastpixSeekFeatureEnabled = true      // <- add this line
-        fastpixSeekGesturesEnabled = true
-        //        fastpix_setupSeekGesturesIfNeeded()
-    }
-    
     // MARK: - Forward / Backward Seek Logic (uses FastPixSeekManager)
     private func fastpix_ensureSeekManager() {
         if seekManager == nil, let player = player {
@@ -949,7 +1038,7 @@ extension AVPlayerViewController {
         fastpix_ensureSeekManager()
         seekManager?.seekBackward(by: fastpixSeekButtonsConfig.backwardIncrement)
     }
-
+    
     // MARK: - Seek Buttons UI
     
     /// Call once after player is ready to setup default forward/backward buttons.
@@ -1097,8 +1186,9 @@ extension AVPlayerViewController {
         )
         doubleTap.numberOfTapsRequired = 2
         doubleTap.cancelsTouchesInView = false
-        
+        doubleTap.delegate = self
         view.addGestureRecognizer(doubleTap)
+        
     }
     
     @objc private func fastpix_handleSeekDoubleTap(_ gesture: UITapGestureRecognizer) {
@@ -1106,15 +1196,42 @@ extension AVPlayerViewController {
         
         let location = gesture.location(in: hostView)
         let midX = hostView.bounds.midX
-                
+        
         fastpix_ensureSeekManager()
         
         if location.x < midX {
-            // Left half → backward
             seekManager?.seekBackward(by: fastpixSeekButtonsConfig.backwardIncrement)
+            showSeekFeedback(isForward: false)
+            NotificationCenter.default.post(
+                name: Notification.Name("fastpixSeekGesture"),
+                object: nil,
+                userInfo: ["direction": "backward"]
+            )
         } else {
-            // Right half → forward
             seekManager?.seekForward(by: fastpixSeekButtonsConfig.forwardIncrement)
+            showSeekFeedback(isForward: true)
+            NotificationCenter.default.post(
+                name: Notification.Name("fastpixSeekGesture"),
+                object: nil,
+                userInfo: ["direction": "forward"]
+            )
+        }
+    }
+    
+    private func showSeekFeedback(isForward: Bool) {
+        let overlay = isForward ? rightSeekOverlay : leftSeekOverlay
+        guard let view = overlay else { return }
+        
+        view.transform = CGAffineTransform(scaleX: 0.8, y: 0.8)
+        view.alpha = 0
+        
+        UIView.animate(withDuration: 0.15) {
+            view.alpha = 1
+            view.transform = .identity
+        }
+        
+        UIView.animate(withDuration: 0.25, delay: 0.45, options: []) {
+            view.alpha = 0
         }
     }
     
@@ -1224,6 +1341,26 @@ extension AVPlayerViewController {
     public func setPiPAudioBehavior(mixWithOthers: Bool) {
         fastPixPiPManager?.setPiPAudioBehavior(mixWithOthers: mixWithOthers)
     }
+    
+    public func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        // Allow AVPlayer gestures + your seek gesture together
+        return true
+    }
+    
+    public func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldReceive touch: UITouch
+    ) -> Bool {
+        // Don't block buttons or sliders
+        if touch.view is UIControl {
+            return false
+        }
+        return true
+    }
+    
 }
 
 // MARK: - FastPixFullscreenDelegate & FastPixPiPDelegate bridging
@@ -1349,5 +1486,42 @@ extension AVPlayerViewController {
         case .timestamp:
             return (nil, manager.fallbackMode == .timestamp)
         }
+    }
+}
+
+extension AVPlayerViewController {
+    
+    private var fastpixPlaybackRateManager: FastPixPlaybackRateManager? {
+        get {
+            objc_getAssociatedObject(self, &FastPixPlaybackRateKeys.manager) as? FastPixPlaybackRateManager
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &FastPixPlaybackRateKeys.manager,
+                newValue,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
+    
+    // MARK: - Playback Rate APIs
+    public func setPlaybackSpeed(_ rate: FastPixPlaybackRateManager.PlaybackRate) {
+        fastpixPlaybackRateManager?.setPlaybackSpeed(rate)
+        fastPixDelegate?.onPlaybackRateChanged(self, rate: rate.rawValue)
+    }
+    
+    public func incrementPlaybackRate() {
+        fastpixPlaybackRateManager?.incrementPlaybackRate()
+        fastPixDelegate?.onPlaybackRateChanged(self, rate: currentPlaybackRate())
+    }
+    
+    public func decrementPlaybackRate() {
+        fastpixPlaybackRateManager?.decrementPlaybackRate()
+        fastPixDelegate?.onPlaybackRateChanged(self, rate: currentPlaybackRate())
+    }
+    
+    public func currentPlaybackRate() -> Float {
+        return fastpixPlaybackRateManager?.currentRate() ?? 1.0
     }
 }

@@ -3,6 +3,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0]
+
+- **Volume Control**
+  - Added device-level volume support, reflecting system volume changes made via hardware buttons.
+  - Introduced on-screen volume control APIs for building custom sliders or gesture-based volume controls.
+  - Added mute / unmute functionality with proper state handling.
+  - Ensured volume slider UI and mute state remain synchronized with the player’s audio state
+- **Playback Loop**
+  - Added Playback Loop support to automatically restart playback when the video reaches the end.
+  - Loop behavior works seamlessly across inline playback, fullscreen, and Picture-in-Picture (PiP) modes.
+  - Enabled simple configuration using `isLoopEnabled`.
+  - Playback loop is disabled by default to preserve standard playback behavior.
+- **Autoplay**
+  - Added Autoplay support to automatically start playback once the media is ready.
+  - Enabled simple configuration using `isAutoPlayEnabled`.
+  - Autoplay behavior extends to playlist playback for automatic item transitions.
+  - Autoplay is disabled by default to maintain user-controlled playback.
+- **Playback Speed Control**
+  - Added Playback Speed Control to dynamically adjust playback rate during runtime.
+  - Supports multiple playback rates including slow-motion and fast-forward options.
+  - Set a specific playback rate, Increment playback speed, Decrement playback speed, Retrieve the current playback rate.
+  - Playback speed changes apply instantly without interrupting playback or affecting buffering, video quality, or audio sync.
+  - Default playback speed is set to 1x (normal playback)
+
 ## [0.6.0]
 
 - **Forward & Rewind Controls**

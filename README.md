@@ -631,6 +631,163 @@ playerViewController.configureSeekButtons(
 - Controls remain visible while users interact with forward or rewind buttons.
 - Works consistently across play, pause, buffering, playback end, fullscreen, inline, and Picture-in-Picture (PiP) modes.
 
+### Volume Control : 
+
+The iOS Player SDK provides multiple ways to manage audio playback. Integrating applications can control device volume, implement on-screen volume controls, and toggle mute/unmute functionality using the SDK player instance.
+
+#### Device Volume Control: 
+
+The SDK respects the device’s system volume. Any changes made using the hardware volume buttons are automatically reflected during playback.
+
+- Uses the device’s current system volume.
+- No additional SDK configuration required.
+- Changes apply instantly during playback.
+
+#### On-Screen Volume Control : 
+
+Integrators can implement custom on-screen volume controls (such as sliders or gestures) by updating the player’s volume programmatically.
+
+- Ideal for custom UI sliders or gesture-based controls.
+- Volume range: 0.0 (mute) to 1.0 (maximum).
+- Applies only to the SDK player instance.
+
+```swift
+
+// Update the player’s volume based on the slider value
+// Range: 0.0 (mute) to 1.0 (maximum volume)
+playerViewController.setVolume(sender.value)
+
+// Update the mute/unmute icon depending on whether volume is zero
+// If slider value is 0, treat the player as muted
+updateMuteIcon(isMuted: sender.value == 0)
+```
+
+#### Mute / Unmute Functionality : 
+
+The SDK supports instant muting and unmuting of audio without changing the current volume level.
+
+- Does not modify the existing volume value
+- Useful for mute buttons and accessibility controls
+- Takes effect immediately during playback
+
+```swift
+
+// Toggle the mute state of the player
+// If currently playing audio, it will mute; if muted, it will unmute
+playerViewController.toggleMute()
+
+// Fetch the updated mute state after toggling
+let isMuted = playerViewController.isMuted()
+```
+
+#### Volume state updates :
+
+```swift
+/// Called whenever the player's volume level changes
+func onVolumeChanged(
+    _ player: AVPlayerViewController,
+    volume: Float
+) {
+    // Volume range: 0.0 (silent) to 1.0 (max)
+    print("[Volume] Volume changed to \(volume)")
+}
+
+/// Called when the player is muted or unmuted
+func onMute(
+    _ player: AVPlayerViewController,
+    isMuted: Bool
+) {
+    // true = muted, false = unmuted
+    print("[Volume] Mute state changed: \(isMuted)")
+}
+```
+
+### Playback Loop : 
+
+Playback Loop in iOS Player SDK enables automatic replay of the video when playback reaches the end. This is useful for previews, short videos, and continuous playback experiences.
+
+```swift
+
+// By default, playback loop is disabled (false)
+
+// Enable playback loop
+// When enabled, the video restarts automatically after reaching the end
+playerViewController.isLoopEnabled = true
+
+// Disable playback loop
+// When disabled, the video stops once playback reaches the end
+playerViewController.isLoopEnabled = false
+```
+
+### Autoplay :
+
+Autoplay in iOS Player SDK allows the player to start playback automatically as soon as the content is ready, without requiring explicit user interaction.
+
+```swift
+// By default, autoplay is disabled (false)
+
+// Enable autoplay
+// When enabled, playback starts automatically as soon as the video is ready
+playerViewController.isAutoPlayEnabled = true
+
+// Disable autoplay
+// When disabled, the user must manually start playback
+playerViewController.isAutoPlayEnabled = false
+```
+
+### Playback Speed Control : 
+
+With the FastPix iOS Player SDK, playback speed can be modified dynamically during playback without interrupting the video or reloading the stream. Changes take effect immediately and remain active until the playback rate is updated again or reset to the default value.
+
+- Supports slower playback for detailed viewing (e.g., tutorials, training videos)
+- Enables faster playback for quick consumption (e.g., reviews, highlights)
+- Works seamlessly during play, pause, and seek operations
+- Does not affect video quality, buffering logic, or audio sync
+
+#### Available Playback Speeds
+
+The SDK supports the following playback speeds:
+- **0.25x** - Quarter speed (slow motion)
+- **0.5x** - Half speed
+- **0.75x** - Three-quarter speed
+- **1.0x** - Normal speed (default)
+- **1.25x** - 1.25x speed
+- **1.5x** - 1.5x speed
+- **1.75x** - 1.75x speed
+- **2.0x** - Double speed
+
+```swift
+// By default, the playback speed is set to 1x (normal playback)
+
+// Set the playback speed to a specific value (e.g., 1x,0.25x)
+playerViewController.setPlaybackSpeed(.1x)
+
+// Increase the playback speed to the next supported rate
+// Example: 1x → 1.25x → 1.5x → 2x
+playerViewController.incrementPlaybackRate()
+
+// Decrease the playback speed to the previous supported rate
+// Example: 2x → 1.5x → 1.25x → 1x
+playerViewController.decrementPlaybackRate()
+
+// Get the current playback speed of the player
+// Returns the active playback rate (e.g., 1x, 1.5x)
+playerViewController.currentPlaybackRate()
+```
+
+#### playbackspeed state updates :
+
+```swift
+/// Called whenever the playback speed of the player changes
+func onPlaybackRateChanged(
+    _ player: AVPlayerViewController,
+    rate: Float
+) {
+    // Current playback rate (default is 1.0x)
+    print("[PlaybackRate] Playback speed changed to \(rate)x")
+}
+```
+
 #### Each of these features is designed to enhance both flexibility and user experience, providing complete control over video playback, appearance, and user interactions in FastPix-player.
 
 # Supporting tvOS

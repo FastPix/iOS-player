@@ -30,7 +30,6 @@ public class FastPixSeekBar: UIView {
     
     // UI Elements
     private let slider = CustomSlider()
-    
     private let touchBlocker = UIView()
     
     // Expose slider pan gesture
@@ -59,7 +58,7 @@ public class FastPixSeekBar: UIView {
     private var isDragging = false
     public var duration: TimeInterval = 0
     private var currentTime: TimeInterval = 0
-    private var lastSeekTime: TimeInterval = 0   // NEW: last drag/seek position
+    private var lastSeekTime: TimeInterval = 0
     
     // MARK: - Initialization
     public override init(frame: CGRect) {
@@ -149,14 +148,14 @@ public class FastPixSeekBar: UIView {
         // Draw the gray buffer bar exactly where the real track is
         bufferProgressView.frame = CGRect(
             x: sliderX + track.origin.x,
-            y: track.midY - 2,               // centered on track (4pt height)
+            y: track.midY - 2,
             width: track.width,
             height: 4
         )
         repositionPreview()
         
         touchBlocker.frame = bounds
-        bringSubviewToFront(slider)   // slider stays interactive
+        bringSubviewToFront(slider)
     }
     
     private func repositionPreview() {

@@ -112,13 +112,13 @@ public final class FastPixSpritesheetManager {
     // MARK: - Entry point used by AVPlayerViewController
     
     func load(url: URL?, config: FastPixSeekPreviewConfig) {
+        
         // 1) If caller passes explicit spritesheet JSON URL, use that.
         if let customURL = url {
             loadCustomSpritesheet(from: customURL)
             return
         }
         
-        // 2) Otherwise, derive FastPix spritesheet JSON URL from current AVPlayerItem URL.
         guard let playbackItem = player?.currentItem,
               let assetURL = (playbackItem.asset as? AVURLAsset)?.url else {
             previewMode = .timestamp
