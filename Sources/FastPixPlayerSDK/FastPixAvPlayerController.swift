@@ -26,6 +26,7 @@ public struct FastPixPlaylistItem {
     public let token: String
     public let drmToken: String
     public let customDomain: String
+    public let skipSegments: [SkipSegment]
     
     public init(
         playbackId: String,
@@ -35,7 +36,8 @@ public struct FastPixPlaylistItem {
         duration: String = "",
         token: String = "",
         drmToken: String = "",
-        customDomain: String = ""
+        customDomain: String = "",
+        skipSegments: [SkipSegment] = []
     ) {
         self.playbackId = playbackId
         self.title = title
@@ -45,6 +47,7 @@ public struct FastPixPlaylistItem {
         self.token = token
         self.drmToken = drmToken
         self.customDomain = customDomain
+        self.skipSegments = skipSegments
     }
 }
 
@@ -110,7 +113,6 @@ extension AVPlayerViewController {
             )
         }
     }
-    
 }
 
 extension AVPlayerViewController {
@@ -373,6 +375,7 @@ extension AVPlayerViewController {
             player.replaceCurrentItem(
                 with: playerItem
             )
+            
         } else {
             player = AVPlayer(
                 playerItem: playerItem
@@ -409,11 +412,13 @@ extension AVPlayerViewController {
     }
     
     @objc private func handlePlaybackStalled(_ notification: Notification) {
+        
         guard let player = player,
               let item = notification.object as? AVPlayerItem,
               item == player.currentItem else { return }
         
         fastpixLastStalledTime = player.currentTime()
+        
         NotificationCenter.default.post(
             name: Notification.Name("PlaybackStalled"),
             object: self
@@ -641,6 +646,15 @@ extension AVPlayerViewController {
             playbackID: current.playbackId,
             playbackOptions: options
         )
+        
+        // 3️⃣ Apply skip segments when item is ready
+        if let playerItem = player?.currentItem {
+            applySkipSegmentsWhenReady(
+                playerItem,
+                segments: current.skipSegments
+            )
+        }
+        
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             
@@ -648,6 +662,7 @@ extension AVPlayerViewController {
                 self.play()
             }
         }
+        
     }
     /// Clean up playlist storage and auto-play
     public func cleanupPlaylist() {
@@ -736,7 +751,6 @@ extension AVPlayerViewController {
         set {
             objc_setAssociatedObject(self, &Self.delegateKey, newValue, .OBJC_ASSOCIATION_ASSIGN)
             if newValue != nil {
-                //                setupPlaybackObservers()
             }
         }
     }
@@ -769,7 +783,6 @@ extension AVPlayerViewController {
         )
     }
     
-    // Loop
     @objc private func playerDidFinishPlaying() {
         if isLoopEnabled {
             player?.seek(to: .zero) { [weak self] _ in
@@ -884,9 +897,7 @@ private struct FastpixOverlayKeys {
     static var rightOverlay = "fastpix.rightOverlay"
 }
 
-
 extension AVPlayerViewController: UIGestureRecognizerDelegate {
-    
     
     var leftSeekOverlay: UIView? {
         get {
@@ -1354,13 +1365,12 @@ extension AVPlayerViewController: UIGestureRecognizerDelegate {
         _ gestureRecognizer: UIGestureRecognizer,
         shouldReceive touch: UITouch
     ) -> Bool {
-        // Don't block buttons or sliders
+        
         if touch.view is UIControl {
             return false
         }
         return true
     }
-    
 }
 
 // MARK: - FastPixFullscreenDelegate & FastPixPiPDelegate bridging
@@ -1382,11 +1392,11 @@ extension AVPlayerViewController: FastPixFullscreenDelegate, FastPixPiPDelegate 
     }
     
     public func onFullscreenOrientationChanged(isLandscape: Bool) {
-        // provide a notification if consumers care about orientation while in fullscreen
+        
         NotificationCenter.default.post(name: Notification.Name("FastPixFullscreenOrientationChangedNotification"),
                                         object: self,
                                         userInfo: ["isLandscape": isLandscape])
-        // NEW: update seek buttons visibility based on current bounds/orientation
+        
         fastpix_updateSeekButtonsVisibilityForCurrentOrientation()
     }
     
@@ -1437,7 +1447,6 @@ extension AVPlayerViewController {
     }
     
     // MARK: - Public Spritesheet API
-    
     public func loadSpritesheet(
         url: URL? = nil,
         previewEnable: Bool = true,
@@ -1523,5 +1532,110 @@ extension AVPlayerViewController {
     
     public func currentPlaybackRate() -> Float {
         return fastpixPlaybackRateManager?.currentRate() ?? 1.0
+    }
+}
+
+private struct FastPixSkipKeys {
+    static var skipManager = "fastpix_skip_manager"
+}
+
+extension AVPlayerViewController {
+    
+    public var skipManager: FastPixSkipManager? {
+        get {
+            objc_getAssociatedObject(self, &FastPixSkipKeys.skipManager) as? FastPixSkipManager
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &FastPixSkipKeys.skipManager,
+                newValue,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
+    
+    public func setupSkipManager(delegate: FastPixSkipDelegate) {
+        
+        guard let player = self.player else {
+            return
+        }
+        
+        // Create ONLY ONCE
+        if skipManager == nil {
+            skipManager = FastPixSkipManager(player: player)
+        }
+        skipManager?.delegate = delegate
+    }
+    
+}
+
+private struct FastPixSkipObserverKeys {
+    static var skipItemObserver = "fastpix_skip_item_observer"
+}
+
+extension AVPlayerViewController {
+    
+    private var skipItemStatusObserver: NSKeyValueObservation? {
+        get {
+            objc_getAssociatedObject(self, &FastPixSkipObserverKeys.skipItemObserver)
+            as? NSKeyValueObservation
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &FastPixSkipObserverKeys.skipItemObserver,
+                newValue,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
+    
+    func applySkipSegmentsWhenReady(
+        _ item: AVPlayerItem,
+        segments: [SkipSegment]
+    ) {
+        
+        // Clear previous observer + segments
+        skipItemStatusObserver = nil
+        skipManager?.setSkipSegments([])
+        
+        guard !segments.isEmpty else { return }
+        
+        // If item already ready → apply immediately
+        if item.status == .readyToPlay {
+            skipManager?.setSkipSegments(segments)
+            return
+        }
+        
+        // Else wait for ready state
+        skipItemStatusObserver = item.observe(
+            \.status,
+             options: [.new]
+        ) { [weak self] item, _ in
+            guard let self else { return }
+            
+            if item.status == .readyToPlay {
+                DispatchQueue.main.async {
+                    self.skipManager?.setSkipSegments(segments)
+                    self.skipItemStatusObserver = nil
+                }
+            }
+        }
+    }
+}
+
+extension AVPlayerViewController {
+    
+    public func setSkipSegments(_ segments: [SkipSegment]) {
+        
+        guard let skipManager else {
+            return
+        }
+        skipManager.setSkipSegments(segments)
+    }
+    
+    public func skipCurrentSegment() {
+        skipManager?.skipCurrentSegment()
     }
 }

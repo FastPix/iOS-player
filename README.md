@@ -788,6 +788,96 @@ func onPlaybackRateChanged(
 }
 ```
 
+### Network Handling : 
+
+FastPix iOS Player SDK includes built-in network awareness to handle real-world connectivity changes during playback.
+
+- Automatically detects network changes (Wi-Fi, Cellular, Offline)
+- Pauses playback when the network is lost
+- Optionally resumes playback when the network is restored
+- Improves stability during buffering, stalls, and network switches
+- Exposes network state updates so apps can show custom UI like No Internet or Reconnecting
+
+>**NOTE:**
+>The SDK handles playback logic, while integrators control UI and retry behavior.
+
+### Skip Controls (Intro / Songs / Credits) :
+
+FastPix iOS Customizable Player SDK supports OTT-style skip controls using time-based segments.
+
+- Supports Skip Intro, Skip Songs, and Skip Credits
+- Skip segments can be configured per playlist item
+- SDK automatically applies skip ranges during playback
+- Skip button visibility is managed based on current playback time
+- Skip state resets automatically during playlist transitions
+- Fully compatible with custom player UI
+
+#### Configure Skip Segments per Playlist Item:
+
+```swift
+let item = FastPixPlaylistItem(
+    
+    // Playback ID associated with the video
+    playbackId: "<PLAYBACK_ID>",
+    
+    // Title of the content (used for UI / playlist display)
+    title: "Episode 1",
+    
+    // Define skip segments for this video
+    skipSegments: [
+        
+        // Skip Intro from 10s to 90s
+        SkipSegment(startTime: 10, endTime: 90, type: .intro),
+        
+        // Skip Song section from 6:00 to 8:00
+        SkipSegment(startTime: 360, endTime: 480, type: .song),
+        
+        // Skip Credits from 9:00 to 9:56
+        SkipSegment(startTime: 540, endTime: 596, type: .credits)
+    ]
+)
+```
+
+#### Initialize Skip Manager
+
+Initialize the skip manager after the player is ready (recommended inside `viewDidAppear`).
+
+```swift
+override func viewDidAppear(_ animated: Bool) {
+    super.viewDidAppear(animated)
+
+    // Ensure UI updates and player setup happen on the main thread
+    DispatchQueue.main.async {
+
+        // Make sure the AVPlayer instance is fully initialized
+        // Skip manager depends on the player being available
+        guard self.playerViewController.player != nil else { return }
+
+        // Attach the Skip Manager and set the delegate
+        // This enables skip segment detection and visibility callbacks
+        self.playerViewController.setupSkipManager(delegate: self)
+
+        // Setup custom Skip button UI (Intro / Song / Credits)
+        self.setupSkipButton()
+    }
+}
+```
+
+#### Handle Skip Button Visibility:
+
+```swift
+// Called by the SDK when playback enters or exits a skip segment
+func onSkipVisibilityChanged(isVisible: Bool) {
+    
+    // Show skip button when a skip segment is active
+    // Hide it when playback is outside skip ranges
+    skipButton.isHidden = !isVisible
+}
+```
+
+>**NOTE:**
+>The SDK manages skip logic and timing. Integrators are responsible for rendering the skip UI.
+
 #### Each of these features is designed to enhance both flexibility and user experience, providing complete control over video playback, appearance, and user interactions in FastPix-player.
 
 # Supporting tvOS

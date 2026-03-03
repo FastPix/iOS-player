@@ -3,6 +3,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0]
+
+- **Network Handling**
+  - Added real-time network monitoring (Wi-Fi, Cellular, Offline).
+  - Automatically pauses playback on network loss and resumes on reconnection (configurable).
+  - Exposed network state callbacks for custom UI and handling.
+  - Improved playback stability during buffering, stalls, and network switches.
+- **Skip Controls (Intro / Songs / Credits)**
+  - Added support for Skip Intro, Skip Songs, and Skip Credits using time-based skip segments.
+  - Skip segments can be configured per asset or per FastPixPlaylistItem.
+  - SDK automatically validates and applies skip ranges during playback.
+  - Introduced SkipManager APIs to set, clear, and trigger skips.
+  - Skip button visibility is managed by the SDK based on playback time.
+  - Skip state resets automatically during playlist transitions.
+  - Fully compatible with custom UI implementations.
+
 ## [0.7.0]
 
 - **Volume Control**
