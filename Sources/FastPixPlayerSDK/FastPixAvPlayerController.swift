@@ -388,6 +388,21 @@ extension AVPlayerViewController {
         } else {
             fastpixPlaybackRateManager?.attach(player: player)
         }
+        
+        if audioTrackManager == nil {
+            audioTrackManager = FastPixAudioTrackManager(player: player)
+        } else {
+            audioTrackManager?.attach(player: player)
+        }
+        audioTrackManager?.delegate = audioTrackDelegate
+        
+        if subtitleTrackManager == nil {
+            subtitleTrackManager = FastPixSubtitleTrackManager(player: player)
+        } else {
+            subtitleTrackManager?.attach(player: player)
+        }
+        subtitleTrackManager?.delegate = subtitleTrackDelegate
+        
         setupVolumeManager()
         setupEndObserver()
         observeItemStallAndFailure(playerItem)
@@ -1637,5 +1652,162 @@ extension AVPlayerViewController {
     
     public func skipCurrentSegment() {
         skipManager?.skipCurrentSegment()
+    }
+}
+
+extension AVPlayerViewController {
+    
+    private static var audioTrackManagerKey = "FastPixAudioTrackManager"
+    
+    public var audioTrackManager: FastPixAudioTrackManager? {
+        get {
+            return objc_getAssociatedObject(self, &Self.audioTrackManagerKey) as? FastPixAudioTrackManager
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &Self.audioTrackManagerKey,
+                newValue,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
+    
+    private static var audioTrackDelegateKey = "FastPixAudioTrackDelegate"
+    
+    public weak var audioTrackDelegate: FastPixAudioTrackDelegate? {
+        get {
+            return objc_getAssociatedObject(self, &Self.audioTrackDelegateKey) as? FastPixAudioTrackDelegate
+        }
+        set {
+            objc_setAssociatedObject(self,
+                                     &Self.audioTrackDelegateKey,
+                                     newValue,
+                                     .OBJC_ASSOCIATION_ASSIGN)
+        }
+    }
+    
+    public func getAudioTracks() -> [AudioTrack] {
+        return audioTrackManager?.fetchAudioTracks() ?? []
+    }
+    
+    public func getCurrentAudioTrack() -> AudioTrack? {
+        return audioTrackManager?.getCurrentTrack()
+    }
+    
+    public func setAudioTrack(trackId: String) {
+        
+        do {
+            try audioTrackManager?.selectTrack(trackId: trackId)
+            
+            if let track = getCurrentAudioTrack() {
+                audioTrackDelegate?.onAudioTrackChange(selectedTrack: track)
+            }
+            
+        } catch {
+            fastPixDelegate?.playerDidFail(self, error: error)
+        }
+    }
+    
+    public func setPreferredAudioTrack(_ languageName: String?) {
+        audioTrackManager?.setPreferredAudioTrack(languageName: languageName)
+    }
+}
+
+extension AVPlayerViewController: FastPixAudioTrackDelegate {
+    
+    public func onAudioTracksUpdated(tracks: [AudioTrack]) {
+        // Forward to host app if needed
+    }
+    
+    public func onAudioTrackChange(selectedTrack: AudioTrack) {
+        // Forward to host app delegate
+    }
+    
+    public func onAudioTrackFailed(error: AudioTrackError) {
+        // Forward to host app delegate
+    }
+    
+    public func onAudioTrackSwitching(isSwitching: Bool) {
+        // Optional event
+    }
+}
+
+extension AVPlayerViewController {
+    
+    private static var subtitleTrackManagerKey = "FastPixSubtitleTrackManager"
+    
+    public var subtitleTrackManager: FastPixSubtitleTrackManager? {
+        get {
+            return objc_getAssociatedObject(self, &Self.subtitleTrackManagerKey) as? FastPixSubtitleTrackManager
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &Self.subtitleTrackManagerKey,
+                newValue,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
+    
+    private static var subtitleTrackDelegateKey = "FastPixSubtitleTrackDelegate"
+    
+    public weak var subtitleTrackDelegate: FastPixSubtitleTrackDelegate? {
+        get {
+            return objc_getAssociatedObject(self, &Self.subtitleTrackDelegateKey) as? FastPixSubtitleTrackDelegate
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &Self.subtitleTrackDelegateKey,
+                newValue,
+                .OBJC_ASSOCIATION_ASSIGN
+            )
+        }
+    }
+    
+    public func getSubtitleTracks() -> [SubtitleTrack] {
+        return subtitleTrackManager?.getSubtitleTracks() ?? []
+    }
+    
+    public func getCurrentSubtitleTrack() -> SubtitleTrack? {
+        return subtitleTrackManager?.getCurrentSubtitleTrack()
+    }
+    
+    public func setSubtitleTrack(trackId: String) {
+        
+        do {
+            try subtitleTrackManager?.setSubtitleTrack(trackId: trackId)
+        } catch {
+            print("Subtitle switching failed:", error)
+        }
+    }
+    
+    public func setPreferredSubtitleTrack(_ languageName: String?) {
+        subtitleTrackManager?.setPreferredSubtitleTrack(languageName: languageName)
+    }
+    
+    public func disableSubtitles() {
+        subtitleTrackManager?.disableSubtitles()
+    }
+}
+
+extension AVPlayerViewController: FastPixSubtitleTrackDelegate {
+    
+    public func onSubtitlesLoaded(tracks: [SubtitleTrack]) {
+        // Forward to host app if needed
+    }
+    
+    public func onSubtitleChange(track: SubtitleTrack?) {
+        // Notify UI
+    }
+    
+    public func onSubtitlesLoadedFailed(error: SubtitleTrackError) {
+        // Forward to host app delegate
+    }
+    
+    public func onSubtitleCueChange(information: SubtitleRenderInfo) {
+        // Optional: custom subtitle rendering
     }
 }

@@ -878,6 +878,213 @@ func onSkipVisibilityChanged(isVisible: Bool) {
 >**NOTE:**
 >The SDK manages skip logic and timing. Integrators are responsible for rendering the skip UI.
 
+### Audio Track Switching:
+
+FastPix iOS Player SDK automatically detects all available audio tracks from the stream and allows users to switch between them dynamically during playback — ideal for multi-language content.
+
+#### Set Up Audio Track Delegate
+```swift
+playerViewController.audioTrackDelegate = self
+```
+
+#### Set Preferred Audio Track
+
+Set a preferred audio track by language name. The SDK will automatically select it when the video loads. If the preferred track is not available, the manifest default is used.
+```swift
+// Pass the display name of the language (case-insensitive)
+playerViewController.setPreferredAudioTrack("Hindi")
+```
+
+#### Get Available Audio Tracks
+```swift
+let audioTracks = playerViewController.getAudioTracks()
+```
+
+#### Get Current Audio Track
+```swift
+let currentTrack = playerViewController.getCurrentAudioTrack()
+```
+
+#### Switch Audio Track
+```swift
+// Switch by track ID
+playerViewController.setAudioTrack(trackId: track.id)
+```
+
+#### Handle Audio Track Events
+
+Conform to `FastPixAudioTrackDelegate` to receive track updates:
+```swift
+extension VideoPlayerViewController: FastPixAudioTrackDelegate {
+
+    // Called when audio tracks are loaded or updated
+    func onAudioTracksUpdated(tracks: [AudioTrack]) {
+        print("Available audio tracks:", tracks)
+    }
+
+    // Called when the active audio track changes
+    func onAudioTrackChange(selectedTrack: AudioTrack) {
+        print("Audio switched to:", selectedTrack.label)
+    }
+
+    // Called when a track switch fails
+    func onAudioTrackFailed(error: AudioTrackError) {
+        print("Audio switch failed:", error)
+    }
+
+    // Called when a track switch starts or finishes
+    func onAudioTrackSwitching(isSwitching: Bool) {
+        if isSwitching {
+            // Show loading indicator
+        } else {
+            // Hide loading indicator
+        }
+    }
+}
+```
+
+#### AudioTrack Model
+
+| Property | Type | Description |
+|---|---|---|
+| `id` | `String` | Unique identifier for the track |
+| `languageCode` | `String` | BCP-47 language tag (e.g. `"hi"`, `"en"`) |
+| `languageName` | `String` | Display name of the language (e.g. `"Hindi"`) |
+| `label` | `String` | Human-readable label shown in UI |
+| `isSelected` | `Bool` | Whether this track is currently active |
+| `isDefault` | `Bool` | Whether this is the default track |
+
+### Subtitle Track Switching:
+
+FastPix iOS Player SDK supports WebVTT-based subtitle tracks. It automatically parses the HLS manifest, fetches subtitle segments, and renders cues in sync with playback.
+
+#### Set Up Subtitle Track Delegate
+```swift
+playerViewController.subtitleTrackDelegate = self
+```
+
+#### Set Preferred Subtitle Track
+
+Set a preferred subtitle track by language name. The SDK will automatically select it when the video loads.
+```swift
+// Pass the display name of the language (case-insensitive)
+playerViewController.setPreferredSubtitleTrack("Hindi")
+```
+
+#### Get Available Subtitle Tracks
+```swift
+let subtitleTracks = playerViewController.getSubtitleTracks()
+```
+
+#### Get Current Subtitle Track
+```swift
+// Returns nil if subtitles are disabled
+let currentTrack = playerViewController.getCurrentSubtitleTrack()
+```
+
+#### Switch Subtitle Track
+```swift
+// Switch by track ID
+try? playerViewController.setSubtitleTrack(trackId: track.id)
+```
+
+#### Disable Subtitles
+```swift
+playerViewController.disableSubtitles()
+```
+
+#### Render Subtitle Cues
+
+The SDK delivers subtitle text in real time via `onSubtitleCueChange`. You are responsible for rendering it in your UI:
+```swift
+private let subtitleLabel: UILabel = {
+    let label = UILabel()
+    label.textColor = .white
+    label.font = UIFont.systemFont(ofSize: 16, weight: .medium)
+    label.textAlignment = .center
+    label.numberOfLines = 0
+    label.backgroundColor = UIColor.black.withAlphaComponent(0.5)
+    label.translatesAutoresizingMaskIntoConstraints = false
+    return label
+}()
+```
+
+Position it above the seek bar inside `playerViewController.view`:
+```swift
+private func setupSubtitleLabel() {
+    playerViewController.view.addSubview(subtitleLabel)
+    playerViewController.view.bringSubviewToFront(subtitleLabel)
+
+    NSLayoutConstraint.activate([
+        subtitleLabel.leadingAnchor.constraint(
+            equalTo: playerViewController.view.leadingAnchor, constant: 20),
+        subtitleLabel.trailingAnchor.constraint(
+            equalTo: playerViewController.view.trailingAnchor, constant: -20),
+        subtitleLabel.bottomAnchor.constraint(
+            equalTo: playerViewController.view.bottomAnchor, constant: -130)
+    ])
+}
+```
+
+#### Handle Subtitle Events
+
+Conform to `FastPixSubtitleTrackDelegate` to receive subtitle updates:
+```swift
+extension VideoPlayerViewController: FastPixSubtitleTrackDelegate {
+
+    // Called when subtitle tracks finish loading
+    func onSubtitlesLoaded(tracks: [SubtitleTrack]) {
+        print("Subtitle tracks available:", tracks)
+    }
+
+    // Called when the active subtitle track changes
+    func onSubtitleChange(track: SubtitleTrack?) {
+        print("Subtitle switched to:", track?.label ?? "Off")
+    }
+
+    // Called every time a new subtitle cue becomes active
+    func onSubtitleCueChange(information: SubtitleRenderInfo) {
+        DispatchQueue.main.async {
+            if information.text.isEmpty {
+                self.subtitleLabel.isHidden = true
+            } else {
+                self.subtitleLabel.text = information.text
+                self.subtitleLabel.isHidden = false
+            }
+        }
+    }
+
+    // Called when subtitle tracks fail to load
+    func onSubtitlesLoadedFailed(error: SubtitleTrackError) {
+        print("Subtitle load failed:", error)
+    }
+}
+```
+
+#### SubtitleTrack Model
+
+| Property | Type | Description |
+|---|---|---|
+| `id` | `String` | Unique identifier for the track |
+| `languageCode` | `String` | BCP-47 language tag (e.g. `"hi"`, `"en"`) |
+| `label` | `String` | Human-readable label shown in UI |
+| `playlistURL` | `String?` | Resolved URL of the subtitle playlist |
+| `isSelected` | `Bool` | Whether this track is currently active |
+
+#### SubtitleRenderInfo Model
+
+| Property | Type | Description |
+|---|---|---|
+| `text` | `String` | Subtitle cue text. Empty string means the cue has ended |
+| `timestamp` | `Double` | Playback time in seconds when the cue is active |
+| `languageCode` | `String` | Language code of the active subtitle track |
+
+> **NOTE:**
+> - Subtitle rendering is the host app's responsibility. The SDK delivers cue text only.
+> - Always call `disableSubtitles()` when switching playlist items to prevent stale cues from appearing on videos without subtitles.
+> - Add the subtitle label to `playerViewController.view`, not `self.view`, to ensure correct positioning across orientations and fullscreen transitions.
+> - The SDK automatically stops the subtitle parser when `disableSubtitles()` is called or when the player is detached.
+
 #### Each of these features is designed to enhance both flexibility and user experience, providing complete control over video playback, appearance, and user interactions in FastPix-player.
 
 # Supporting tvOS

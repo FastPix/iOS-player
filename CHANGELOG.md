@@ -3,6 +3,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0]
+
+- **Audio Track Switching**
+  - Added `setPreferredAudioTrack(languageName:)` to set a preferred audio language by display name (case-insensitive).
+  - Preferred audio track is automatically applied on every playlist item change, not just the first video.
+  - SDK now resets the preferred track selection state on each player attach, ensuring consistent behavior across playlist transitions.
+  - Introduced `FastPixAudioTrackDelegate` with callbacks for track updates, track changes, switching state, and errors.
+  - Added `getAudioTracks()` to retrieve all available audio tracks for the current item.
+  - Added `getCurrentAudioTrack()` to retrieve the currently active audio track.
+  - Added `setAudioTrack(trackId:)` to switch audio tracks programmatically during playback.
+  - Falls back to the manifest default track if the preferred language is not available in the stream.
+- **Subtitle Track Switching**
+  - Added `setPreferredSubtitleTrack(languageName:)` to set a preferred subtitle language by display name (case-insensitive).
+  - Preferred subtitle track is automatically applied on every playlist item change.
+  - SDK resets subtitle parser and selection state on each player attach to prevent stale cues across playlist transitions.
+  - Introduced `FastPixSubtitleTrackDelegate` with callbacks for tracks loaded, track change, cue change, and errors.
+  - Added `getSubtitleTracks()` to retrieve all available subtitle tracks for the current item.
+  - Added `getCurrentSubtitleTrack()` to retrieve the currently active subtitle track, or `nil` if subtitles are off.
+  - Added `setSubtitleTrack(trackId:)` to switch subtitle tracks programmatically during playback.
+  - Added `disableSubtitles()` to turn off subtitles and stop the WebVTT parser.
+  - Real-time subtitle cue delivery via `onSubtitleCueChange(information:)` with text, timestamp, and language code.
+  - Built-in WebVTT parser that fetches and parses subtitle segments from HLS manifest-resolved playlist URLs.
+  - Falls back to the manifest default track if the preferred language is not available in the stream.
+
 ## [0.8.0]
 
 - **Network Handling**
