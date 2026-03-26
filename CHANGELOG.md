@@ -3,6 +3,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0]
+
+- Updated iOS Data Core SDK by updating the SDK’s default metrics collection domain to improve endpoint reliability and alignment with current infrastructure.
+
 ## [0.9.0]
 
 - **Audio Track Switching**
