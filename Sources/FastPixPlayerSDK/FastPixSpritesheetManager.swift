@@ -130,6 +130,9 @@ public final class FastPixSpritesheetManager {
             return
         }
         
+        // Extract token (if present)
+        let token = extractToken(from: assetURL)
+        
         //Choose images host based on stream host
         let imagesHost: String
         switch assetURL.host {
@@ -145,12 +148,26 @@ public final class FastPixSpritesheetManager {
             return
         }
         
-        let jsonString = "https://\(imagesHost)/\(playbackID)/spritesheet.json"
+        var jsonString = "https://\(imagesHost)/\(playbackID)/spritesheet.json"
+        
+        // Append token ONLY if it exists
+        if let token = token, !token.isEmpty {
+            jsonString += "?token=\(token)"
+        }
+        
         guard let jsonURL = URL(string: jsonString) else {
             previewMode = .timestamp
             return
         }
         loadCustomSpritesheet(from: jsonURL)
+    }
+    
+    private func extractToken(from url: URL) -> String? {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let queryItems = components.queryItems else {
+            return nil
+        }
+        return queryItems.first(where: { $0.name == "token" })?.value
     }
     
     func clearCache() {

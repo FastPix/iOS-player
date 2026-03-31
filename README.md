@@ -608,6 +608,12 @@ seekBar.updatePreviewThumbnail(
 - Automatically falls back to timestamp if thumbnail is unavailable
 - Works with playlists and custom seek bars
 
+- **Spritesheet Support for Secured Content**
+  - Resolved limitation where spritesheet previews were not available for private and DRM-protected streams.
+  - Added full support for timeline thumbnail previews in **FairPlay DRM** and **token-protected media**.
+  - Ensured secure fetching and rendering of spritesheet assets without exposing protected URLs.
+  - Improved scrubbing experience consistency across public and secured playback.
+
 ### Forward & Rewind Controls : 
 
 FastPix iOS Player SDK provides Forward and Rewind seek controls functionality that integrates with AVPlayer and custom player UIs. These controls are designed to work reliably alongside a custom seekbar, gestures, and auto-hide logic.

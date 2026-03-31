@@ -3,6 +3,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.0]
+
+- **Enhanced Spritesheet Support**
+  - Added support for spritesheet-based timeline preview for **private media**.
+  - Enabled spritesheet preview for **DRM-protected content (FairPlay)**.
+  - Improved thumbnail loading mechanism to work seamlessly with secured playback URLs.
+  - Ensured compatibility with token-based and signed URL playback flows.
+  - Optimized preview rendering performance for smoother scrubbing experience across all content types.
+
 ## [0.10.0]
 
 - Updated iOS Data Core SDK by updating the SDK’s default metrics collection domain to improve endpoint reliability and alignment with current infrastructure.
