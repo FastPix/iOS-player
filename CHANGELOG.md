@@ -3,6 +3,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.1]
+
+- **Fixed**
+  - Fixed Swift Package Manager configuration.
+  - Updated `swift-tools-version`.
+  - Improved package compatibility with Xcode.
+
 ## [0.11.0]
 
 - **Enhanced Spritesheet Support**
