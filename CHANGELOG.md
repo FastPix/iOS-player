@@ -3,6 +3,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0]
+
+- **Adaptive Bitrate (ABR) & Resolution Switching**
+  - Added support for Adaptive Bitrate Streaming (ABR) to automatically adjust video quality based on network conditions, ensuring smooth playback with reduced buffering.
+  - Enabled manual resolution switching, allowing users to select specific quality levels (e.g., 240p, 480p, 720p) during playback.
+  - Introduced `QualityLevel` model with properties such as label, bitrate, resolution, and auto-mode indicator.
+  - Added `setupQualityManager(delegate:)` to initialize and manage quality-related operations.
+  - Added `qualityDelegate` to receive real-time updates for quality changes and availability.
+  - Added `getResolutionLevels()` to fetch all available quality levels dynamically from the stream.
+  - Added `getCurrentResolutionLevel()` to retrieve the currently active quality level.
+  - Added `setResolutionLevel(_:)` to allow manual switching between available quality levels.
+  - Added `resetToAuto()` to switch back to automatic ABR mode.
+  - Implemented dynamic loading of quality levels after playback starts for accurate detection based on stream data.
+  - Introduced delegate callbacks:
+    - `onQualityLevelsUpdated` for receiving available quality levels
+    - `onQualityLevelChanged` for tracking successful quality switches
+    - `onQualitySwitching` for indicating switching state
+    - `onQualityLevelFailed` for handling errors during switching
+  - Designed to work effortlessly with custom player UI, enabling OTT-style quality selectors (Auto / Manual modes).
+  - Fully compatible with HLS streaming, buffering logic, and playlist-based playback.
+
 ## [0.11.1]
 
 - **Fixed**

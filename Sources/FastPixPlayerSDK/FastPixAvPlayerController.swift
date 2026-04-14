@@ -1811,3 +1811,91 @@ extension AVPlayerViewController: FastPixSubtitleTrackDelegate {
         // Optional: custom subtitle rendering
     }
 }
+
+extension AVPlayerViewController {
+    
+    // MARK: - Associated Object Key
+    
+    private static var qualityManagerKey = "FastPixQualityManagerKey"
+    
+    // MARK: - Manager
+    
+    public var qualityManager: FastPixQualityManager? {
+        get {
+            return objc_getAssociatedObject(self, &Self.qualityManagerKey) as? FastPixQualityManager
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &Self.qualityManagerKey,
+                newValue,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
+    
+    private static var qualityDelegateKey = "FastPixQualityDelegate"
+    
+    public weak var qualityDelegate: FastPixQualityDelegate? {
+        get {
+            return objc_getAssociatedObject(self, &Self.qualityDelegateKey) as? FastPixQualityDelegate
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &Self.qualityDelegateKey,
+                newValue,
+                .OBJC_ASSOCIATION_ASSIGN
+            )
+        }
+    }
+    
+    public func setupQualityManager(delegate: FastPixQualityDelegate? = nil) {
+        
+        guard let player = self.player else {
+            return
+        }
+        
+        let manager = FastPixQualityManager(player: self.player)
+        manager.delegate = self.qualityDelegate
+        manager.attach(player: self.player)
+        
+        self.qualityManager = manager
+    }
+    
+    // MARK: - Public APIs (Design Doc Aligned)
+    
+    public func getResolutionLevels() -> [QualityLevel] {
+        return qualityManager?.getResolutionLevels() ?? []
+    }
+    
+    public func getCurrentResolutionLevel() -> QualityLevel? {
+        return qualityManager?.getCurrentResolutionLevel()
+    }
+    
+    public func setResolutionLevel(_ level: QualityLevel) {
+        qualityManager?.setResolutionLevel(level)
+    }
+    
+    public func setInitialResolutionLevel(_ level: QualityLevel) {
+        qualityManager?.setInitialResolutionLevel(level)
+    }
+    
+    public func resetToAuto() {
+        qualityManager?.resetToAuto()
+    }
+    
+    public func getAutoQualityLevel() -> QualityLevel? {
+        return qualityManager?.getAutoQualityLevel()
+    }
+    
+    // MARK: - ABR Control
+    
+    public func setABREnabled(_ enabled: Bool) {
+        qualityManager?.setABREnabled(enabled)
+    }
+    
+    public func isABREnabled() -> Bool {
+        return qualityManager?.isABREnabled() ?? true
+    }
+}

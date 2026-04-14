@@ -1091,6 +1091,120 @@ extension VideoPlayerViewController: FastPixSubtitleTrackDelegate {
 > - Add the subtitle label to `playerViewController.view`, not `self.view`, to ensure correct positioning across orientations and fullscreen transitions.
 > - The SDK automatically stops the subtitle parser when `disableSubtitles()` is called or when the player is detached.
 
+### Adaptive Bitrate (ABR) & Resolution Switching
+
+The FastPix iOS Player SDK provides a powerful and flexible video quality system that supports both:
+
+- **Adaptive Bitrate Streaming (ABR)** – automatic quality selection  
+- **Manual Resolution Switching** – user-controlled quality selection  
+
+This enables developers to build a fully customizable video player experience similar to modern OTT platforms.
+
+#### Setup Quality Manager:
+
+```swift
+// Assign delegate to receive quality-related callbacks
+playerViewController.qualityDelegate = self
+
+// Initialize the quality manager
+// This is required to enable ABR + manual switching support
+playerViewController.setupQualityManager(delegate: self)
+```
+
+#### Fetch Available Quality Levels:
+
+Each QualityLevel contains: label (e.g., Auto, 240p, 480p, 720p)
+- bitrate
+- resolution
+- isAuto
+
+```swift
+// Fetch all available resolution levels from the current stream
+// This will include "Auto" (ABR) + all manual resolutions
+let levels = playerViewController.getResolutionLevels()
+```
+
+#### Get Current Quality Level:
+
+```swift
+// Get the currently active resolution level
+// Useful for updating UI (e.g., highlight selected quality)
+let current = playerViewController.getCurrentResolutionLevel()
+```
+
+#### Switch Quality Level (Manual):
+
+```swift
+// Switch to a specific quality level selected by the user
+// Example: 720p, 1080p, etc.
+playerViewController.setResolutionLevel(level)
+```
+
+##### Note: 
+- Playback continues from the same position
+- Player may buffer briefly during the switch
+
+#### Reset to AutoMode (ABR Mode):
+
+```swift
+// Switch back to Auto mode (ABR enabled)
+// Player will now automatically adjust quality based on network
+playerViewController.resetToAuto()
+```
+
+#### Custom Quality Selection UI:
+You can build custom UI (Action Sheet, Dropdown, etc.):
+
+```swift
+// Iterate through all available quality levels
+for level in levels {
+
+    // If "Auto" is selected → enable ABR
+    if level.isAuto {
+        playerViewController.resetToAuto()
+    } else {
+        // Otherwise switch to selected manual resolution
+        playerViewController.setResolutionLevel(level)
+    }
+}
+```
+
+#### Dynamic Quality Loading : 
+Quality levels are loaded only after playback starts:
+
+```swift
+// Manually trigger loading of quality levels from the stream
+// This parses the HLS manifest (.m3u8) and extracts renditions
+playerViewController.qualityManager?.loadQualityLevels()
+```
+- Best Practice: Trigger this when `player.timeControlStatus == .playing`
+
+#### Delegate Callbacks: 
+
+```swift
+// Called when all quality levels are fetched and ready
+func onQualityLevelsUpdated(levels: [QualityLevel]) {
+    print("Quality levels available: \(levels.count)")
+}
+
+// Called when user or ABR switches the resolution
+func onQualityLevelChanged(selectedLevel level: QualityLevel) {
+    print("Switched to: \(level.label)")
+}
+
+// Called when a quality switch is in progress
+// Use this to show/hide loading indicators in UI
+func onQualitySwitching(isSwitching: Bool) {
+    print("Switching in progress...")
+}
+
+// Called when quality switching fails
+// Handle errors gracefully (e.g., show fallback UI)
+func onQualityLevelFailed(error: QualityLevelError) {
+    print("Quality switch failed: \(error)")
+}
+```
+
 #### Each of these features is designed to enhance both flexibility and user experience, providing complete control over video playback, appearance, and user interactions in FastPix-player.
 
 # Supporting tvOS
