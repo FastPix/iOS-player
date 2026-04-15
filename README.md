@@ -175,12 +175,8 @@ playerViewController.prepare(playbackID: playbackID, playbackOptions: PlaybackOp
 The FastPix iOS Player supports data integration for tracking video playback, user interaction, and environment details. This is useful for analytics, monitoring playback behavior, and generating detailed insights of the playback.
 
 ```swift
-import FastpixVideoDataAVPlayer
-
-let fpDataSDK = initAvPlayerTracking()
-
-let customMetadata = [
-    "data": [
+playerViewController.enableAnalytics(
+    metadata: [
         workspace_id: "WORKSPACE_KEY", // Unique key to identify your workspace (replace with your actual workspace key)
         video_title: "Test Content", // Title of the video being played (replace with the actual title of your video)
         video_id: "f01a98s76t90p88i67x", // A unique identifier for the video (replace with your actual video ID for tracking purposes)
@@ -194,11 +190,6 @@ let customMetadata = [
 
         // Add any additional metadata
     ]
-]
-// Track AVPlayer Controller
-fpDataSDK.trackAvPlayerController(
-    playerController: playerController,   // The AVPlayerViewController instance managing the playback
-    customMetadata: customMetadata
 )
 ```
 
