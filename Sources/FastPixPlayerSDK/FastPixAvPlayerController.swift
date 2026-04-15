@@ -1,6 +1,7 @@
 
 import Foundation
 import AVKit
+import FastpixVideoDataAVPlayer
 
 public protocol FastPixPlayerDelegate: AnyObject {
     func playerDidStartPlaying(_ player: AVPlayerViewController)
@@ -381,6 +382,20 @@ extension AVPlayerViewController {
                 playerItem: playerItem
             )
         }
+
+        // MARK: - Analytics Hook
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            
+            guard let self = self else { return }
+            guard let metadata = self.analyticsMetadata else { return }
+            
+            self.fastpix_attachPlayerLayerIfNeeded()
+            
+            self.analyticsManager?.startTracking(
+                playerLayer: self.fastpixPlayerLayer,
+                metadata: metadata
+            )
+        }
         
         //playbackrate
         if fastpixPlaybackRateManager == nil {
@@ -628,6 +643,8 @@ extension AVPlayerViewController {
     }
     
     private func loadCurrentPlaylistItem() {
+
+        analyticsManager?.reset()
         
         guard let current = playlistManager?.currentItem else { return }
         
@@ -1897,5 +1914,102 @@ extension AVPlayerViewController {
     
     public func isABREnabled() -> Bool {
         return qualityManager?.isABREnabled() ?? true
+    }
+}
+
+final class FastPixAnalyticsManager {
+    
+    private var dataSDK = initAvPlayerTracking()
+    private var isTrackingStarted = false
+    
+    func startTracking(playerLayer: AVPlayerLayer?, metadata: [String: Any]) {
+        guard let layer = playerLayer else { return }
+        guard !isTrackingStarted else { return } // prevent duplicate tracking
+        
+        let payload: [String: Any] = [
+            "data": metadata
+        ]
+        
+        dataSDK.trackAvPlayerLayer(
+            playerLayer: layer,
+            customMetadata: payload
+        )
+        
+        isTrackingStarted = true
+    }
+    
+    func reset() {
+        isTrackingStarted = false
+    }
+}
+
+private struct FastPixAnalyticsKeys {
+    static var manager = "fastpix_analytics_manager"
+    static var metadata = "fastpix_analytics_metadata"
+}
+
+extension AVPlayerViewController {
+    
+    private var analyticsManager: FastPixAnalyticsManager? {
+        get {
+            objc_getAssociatedObject(self, &FastPixAnalyticsKeys.manager) as? FastPixAnalyticsManager
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &FastPixAnalyticsKeys.manager,
+                newValue,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
+    
+    private var analyticsMetadata: [String: Any]? {
+        get {
+            objc_getAssociatedObject(self, &FastPixAnalyticsKeys.metadata) as? [String: Any]
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &FastPixAnalyticsKeys.metadata,
+                newValue,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
+}
+
+extension AVPlayerViewController {
+    
+    public func enableAnalytics(metadata: [String: Any]) {
+        
+        // Store metadata
+        self.analyticsMetadata = enrichMetadata(metadata)
+        
+        print("Came to trcak the Analytics")
+        
+        // Initialize manager
+        if analyticsManager == nil {
+            analyticsManager = FastPixAnalyticsManager()
+        }
+    }
+    
+    private func enrichMetadata(_ metadata: [String: Any]) -> [String: Any] {
+        
+        var enriched = metadata
+        
+        enriched["player_name"] = "AVPlayer"
+        enriched["player_version"] = "1.0.0"
+        enriched["player_software_name"] = "AVPlayer"
+        enriched["player_software_version"] = "1.0.0"
+        enriched["player_fastpix_sdk_name"] = "fastpix-ios-player"
+        enriched["player_fastpix_sdk_version"] = "1.0.0"
+        
+        // Defaults if not provided
+        if enriched["video_stream_type"] == nil {
+            enriched["video_stream_type"] = "on-demand"
+        }
+        
+        return enriched
     }
 }
