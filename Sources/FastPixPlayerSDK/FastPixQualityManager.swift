@@ -55,7 +55,7 @@ public final class FastPixQualityManager {
     public init(player: AVPlayer?) {
         self.player = player
     }
-
+    
     public func attach(player: AVPlayer?) {
         self.player = player
         loadQualityLevels()
@@ -201,7 +201,7 @@ public final class FastPixQualityManager {
     public func reapplyQualityIfNeeded() {
         
         guard let item = player?.currentItem else { return }
-                
+        
         if isAutoMode {
             //Force AUTO explicitly
             item.preferredPeakBitRate = 0
@@ -216,7 +216,7 @@ public final class FastPixQualityManager {
               let resolution = lastSelectedResolution else {
             return
         }
-                
+        
         item.preferredPeakBitRate = bitrate
         
         if #available(iOS 15.0, *) {
@@ -282,7 +282,7 @@ public final class FastPixQualityManager {
             self?.monitorABR()
         }
     }
-
+    
     private func monitorABR() {
         
         guard let item = player?.currentItem,
@@ -291,11 +291,18 @@ public final class FastPixQualityManager {
         let indicated = event.indicatedBitrate
         let observed = event.observedBitrate
         let resolution = event.indicatedBitrate > 0 ? "\(Int(indicated/1000)) kbps" : "N/A"
-                
+        
         //CRITICAL: Re-enforce manual quality
         if !isAutoMode {
             reapplyQualityIfNeeded()
         }
+        
+//        print("""
+//           ABR INFO
+//           Observed: \(observed)
+//           Indicated: \(indicated)
+//           Resolution (approx): \(resolution)
+//           """)
     }
     
     deinit {

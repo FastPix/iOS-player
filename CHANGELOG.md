@@ -3,6 +3,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0]
+
+- **Preload & Precache Support**
+  - Added PreloadManager (singleton via PreloadManager.shared) to initialize AVPlayerItem instances for upcoming playlist items in the background using a shadow AVPlayer, warming AVFoundation's URL session cache before the user navigates to the next video.
+  - Added PrecacheManager (singleton via PrecacheManager.shared) to download and store HLS segments to disk, serving content from the local cache on subsequent playback requests for reduced startup latency.
+  - Introduced `preload(items:)` to queue one or more (id: String, item: AVPlayerItem) pairs for background buffering.
+  - Introduced `preloadStatus(forVideo:)` to query the current preload state of a video — useful for filtering out items that are already loading, ready, or currently playing before queuing a new preload.
+  - Introduced `consumePreloadedItem(for:)` to detach a preloaded item from the shadow player before calling next(), allowing AVFoundation's URL session cache to be reused by the SDK when loading the same stream URL.
+  - Introduced `clearAll()` on PreloadManager to cancel all in-flight preload tasks and release buffered items — call this in deinit to prevent memory leaks.
+  - Introduced `startPrecaching(url:)` on PrecacheManager to begin downloading HLS segments for a given stream URL to disk.
+  - Introduced `stopAllPrecaching()` on PrecacheManager to cancel all active precache downloads — call this in deinit alongside `clearAll()`.
+  - DRM-protected items (drmToken is non-empty) are automatically excluded from precaching since their segments are encrypted and cannot be meaningfully cached. Preloading still applies to DRM items as AVFoundation handles license fetching separately.
+  - Introduced `PreloadManagerDelegate` with the following callbacks:
+    - `videoPreloadDidStart(forId:)` — fires when background buffering begins for a video
+    - `videoPreloadDidBecomeReady(forId:)` — fires when the AVPlayerItem is buffered and ready for instant playback
+    - `videoPreloadDidFail(forId:error:)` — fires when preloading fails, providing the error for logging or retry logic
+    - `videoPreloadDidCancel(forId:)` — fires when a preload task is cancelled (e.g., via clearAll())
+    - `videoPreloadDidAutoAdvance(toId:)` — fires when the SDK auto-advances to the next playlist item and consumes the preloaded buffer.
+  - Introduced `PrecacheManagerDelegate`` with the following callbacks:
+    - `videoCacheDidHit(url:)` — fires when a segment request is served from the local disk cache
+    - `videoCacheDidMiss(url:)` — fires when a segment is not cached and is being downloaded from the network
+  - Preloading and precaching are automatically re-triggered on next(), previous(), jumpTo(), and `FastPixPlaylistStateChanged` to keep the preload window ahead of the current playlist position.
+  - Fully compatible with token-protected streams, custom domains, playlist-based playback, and all existing SDK features.
+
 ## [1.0.0]
 
 - **Adaptive Bitrate (ABR) & Resolution Switching**

@@ -1196,6 +1196,203 @@ func onQualityLevelFailed(error: QualityLevelError) {
 }
 ```
 
+### Preloading & Precaching Support :
+
+FastPix iOS Player SDK supports preloading and precaching of upcoming playlist items to eliminate startup delays and reduce buffering when the user advances to the next video.
+
+- Preloading initializes AVPlayerItem instances for upcoming videos in the background using a shadow AVPlayer, warming up AVFoundation's URL session cache so that when the SDK loads the same stream URL, initial buffering is already complete.
+- Precaching downloads and stores HLS segments to disk, ensuring content is served from the local cache on subsequent playback requests. DRM-protected items (with a drmToken) are automatically skipped during precaching since their segments are encrypted and cannot be cached.
+
+Both managers expose delegate callbacks so the host app can react to preload and cache state changes in the UI.
+
+#### Setup Preload & Precache Managers :
+
+Initialize both managers and assign delegates before starting playback:
+
+```swift
+private let preloadManager = PreloadManager.shared
+private let precacheManager = PrecacheManager.shared
+
+override func viewDidLoad() {
+    super.viewDidLoad()
+
+    playerViewController.addPlaylist(playlist)
+
+    // Assign delegates to receive status callbacks
+    preloadManager.delegate = self
+    precacheManager.delegate = self
+
+    // Start preloading and precaching after the playlist is ready
+    preloadNextVideos()
+    precacheUpcomingVideos()
+}
+```
+
+#### Preload Upcoming Videos :
+
+Preloads the next 2 items after the currently playing index. You can customize the number of items to preload. Call this method when the playlist position changes (for example, `next()`, `previous()`, `jumpTo()`, or `FastPixPlaylistStateChanged`).
+
+```swift
+private func preloadNextVideos() {
+    let currentIndex = playerViewController.currentPlaylistIndex
+    let currentId = currentIndex < playlist.count ? playlist[currentIndex].playbackId : ""
+
+    let upcoming = playlist
+        .enumerated()
+        .filter { $0.offset > currentIndex }
+        .prefix(2)
+        .map { $0.element }
+        .filter {
+            // Skip if already loading, ready, or currently playing
+            let status = preloadManager.preloadStatus(forVideo: $0.playbackId)
+            switch status {
+            case .idle: return $0.playbackId != currentId
+            default:    return false
+            }
+        }
+
+    let itemsToPreload: [(id: String, item: AVPlayerItem)] = upcoming.compactMap { playlistItem -> (id: String, item: AVPlayerItem)? in
+        guard let url = buildPlaybackURL(for: playlistItem) else { return nil }
+        let playerItem = AVPlayerItem(url: url)
+        return (id: playlistItem.playbackId, item: playerItem)
+    }
+
+    guard !itemsToPreload.isEmpty else { return }
+    preloadManager.preload(items: itemsToPreload)
+}
+```
+
+#### Precache Upcoming Videos :
+
+Precaches HLS segments for the current and next video. DRM-protected items are automatically skipped.
+
+```swift
+private func precacheUpcomingVideos() {
+    let currentIndex = playerViewController.currentPlaylistIndex
+    let upcoming = playlist
+        .enumerated()
+        .filter { $0.offset >= currentIndex }
+        .prefix(2)
+        .map { $0.element }
+
+    for item in upcoming {
+        // Skip DRM-protected content — encrypted segments cannot be cached
+        guard item.drmToken.isEmpty else { continue }
+
+        let host = item.customDomain.isEmpty == false
+            ? item.customDomain
+            : "stream.fastpix.io"
+
+        var urlString = "https://\(host)/\(item.playbackId).m3u8"
+        if !item.token.isEmpty {
+            urlString += "?token=\(item.token)"
+        }
+
+        guard let url = URL(string: urlString) else { continue }
+        precacheManager.startPrecaching(url: url)
+    }
+}
+```
+
+### Consume a Preloaded Item Before Navigation :
+
+When navigating to the next item, call `consumePreloadedItem(for:)` before calling `next()`. This detaches the shadow player so AVFoundation's URL session cache can be reused by the SDK when loading the same stream URL.
+
+```swift
+let nextIndex = playerViewController.currentPlaylistIndex + 1
+if nextIndex < playlist.count {
+    let nextId = playlist[nextIndex].playbackId
+    if preloadManager.consumePreloadedItem(for: nextId) != nil {
+        print("🚀 Preloaded item consumed — AVFoundation cache warm for: \(nextId)")
+    }
+}
+_ = playerViewController.next()
+```
+
+#### Re-trigger on Playlist State Changes :
+
+Always re-trigger preloading and precaching inside the `FastPixPlaylistStateChanged` observer so the window stays ahead of the current position:
+
+```swift
+@objc private func playlistStateChanged(_ notification: Notification) {
+    DispatchQueue.main.async {
+        // ... your existing reset logic ...
+        self.preloadNextVideos()
+        self.precacheUpcomingVideos()
+    }
+}
+```
+
+#### Cleanup :
+
+Stop all in-flight preload and precache tasks when the view controller is deallocated:
+
+```swift
+deinit {
+    preloadManager.clearAll()
+    precacheManager.stopAllPrecaching()
+}
+```
+
+#### PreloadManagerDelegate :
+
+Conform to `PreloadManagerDelegate` to receive preload lifecycle callbacks:
+
+```swift
+extension VideoPlayerViewController: PreloadManagerDelegate {
+
+    // Called when preloading begins for a video
+    func videoPreloadDidStart(forId id: String) {
+        print("Preload started for: \(id)")
+    }
+
+    // Called when the preloaded AVPlayerItem is buffered and ready
+    func videoPreloadDidBecomeReady(forId id: String) {
+        print("Preload ready — instant playback available for: \(id)")
+    }
+
+    // Called when preloading fails
+    func videoPreloadDidFail(forId id: String, error: Error?) {
+        print("Preload failed for \(id): \(error?.localizedDescription ?? "unknown error")")
+    }
+
+    // Called when a preload task is cancelled
+    func videoPreloadDidCancel(forId id: String) {
+        print("Preload cancelled for: \(id)")
+    }
+
+    // Called when the SDK auto-advances and consumes the preloaded buffer
+    func videoPreloadDidAutoAdvance(toId id: String) {
+        print("Auto-advance consumed preloaded item: \(id)")
+    }
+}
+```
+
+#### PrecacheManagerDelegate :
+
+Conform to `PrecacheManagerDelegate` to observe whether segments are served from disk or fetched from the network:
+
+```swift
+extension VideoPlayerViewController: PrecacheManagerDelegate {
+
+    // Called when a request is served from the local disk cache
+    func videoCacheDidHit(url: URL) {
+        print("Cache HIT — served from disk: \(url.lastPathComponent)")
+    }
+
+    // Called when a request is not in the cache and is being downloaded
+    func videoCacheDidMiss(url: URL) {
+        print("Cache MISS — downloading and caching: \(url.lastPathComponent)")
+    }
+}
+```
+
+#### NOTE:
+- Call preloadNextVideos() and precacheUpcomingVideos() after every playlist navigation event (next(), previous(), jumpTo()) and inside playlistStateChanged to keep the preload window current.
+- DRM-protected items (drmToken is non-empty) are automatically excluded from precaching. Preloading still applies to DRM items as AVFoundation handles license fetching separately.
+- Always call consumePreloadedItem(for:) before next() to hand off the buffered data to AVFoundation's URL session cache.
+- Call preloadManager.clearAll() and precacheManager.stopAllPrecaching() in deinit to avoid memory leaks and dangling background tasks.
+
 #### Each of these features is designed to enhance both flexibility and user experience, providing complete control over video playback, appearance, and user interactions in FastPix-player.
 
 # Supporting tvOS

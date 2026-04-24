@@ -161,6 +161,7 @@ public class FastPixDRMDelegate: NSObject, AVAssetResourceLoaderDelegate {
                 Task {
                     do {
                         let certificate = try await fetchCertificate()
+                        print("Apple DRM Certificate URL",certificate)
                         guard let contentIdData = url.host?.data(using: .utf8) else {
                             loadingRequest.finishLoading(with: NSError(domain: "FastPixDRM", code: -1))
                             return
@@ -172,6 +173,7 @@ public class FastPixDRMDelegate: NSObject, AVAssetResourceLoaderDelegate {
                             options: nil
                         )
                         var request = URLRequest(url: licenseServerUrl)
+                        print("The License URL",licenseServerUrl)
                         request.httpMethod = "POST"
                         request.httpBody = spcData
                         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
