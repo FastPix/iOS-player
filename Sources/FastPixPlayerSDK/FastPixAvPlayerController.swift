@@ -553,7 +553,7 @@ extension AVPlayerViewController {
         if !current.token.isEmpty {
             options.playbackPolicy = .signed(.init(playbackToken: current.token))
             
-            let base = "https://api.fastpix.co/v1/on-demand/drm"
+            let base = "https://api.fastpix.com/v1/on-demand/drm"
             let licence = "\(base)/license/fairplay/\(current.playbackId)?token=\(current.token)"
             let cert    = "\(base)/cert/fairplay/\(current.playbackId)?token=\(current.token)"
             
@@ -650,7 +650,7 @@ extension AVPlayerViewController {
     // MARK: - Internal Helpers
     
     /// Extracts the playbackId from an AVURLAsset URL.
-    /// Pattern: https://stream.fastpix.io/{playbackId}.m3u8
+    /// Pattern: https://stream.fastpix.com/{playbackId}.m3u8
     internal func fastpixExtractPlaybackID(from asset: AVURLAsset) -> String? {
         let id = asset.url.deletingPathExtension().lastPathComponent
         return id.isEmpty ? nil : id

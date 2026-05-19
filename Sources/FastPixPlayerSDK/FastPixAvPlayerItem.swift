@@ -12,13 +12,13 @@ internal extension URLComponents {
             if let customDomain = playbackOptions.customDomain {
                 self.host = "\(customDomain)"
             } else {
-                self.host = "stream.fastpix.io"
+                self.host = "stream.fastpix.com"
             }
         } else {
             if let customDomain = playbackOptions.customDomain {
                 self.host = "\(customDomain)"
             } else {
-                self.host = "stream.fastpix.io"
+                self.host = "stream.fastpix.com"
             }
         }
         
@@ -65,7 +65,7 @@ fileprivate func createPlaybackURL(playbackID: String,playbackOptions: PlaybackO
             components.host = "\(customDomain)"
             components.path = "/\(playbackID).m3u8"
         } else {
-            components.host = "stream.fastpix.io"
+            components.host = "stream.fastpix.com"
             components.path = "/\(playbackID).m3u8"
         }
     } else {
@@ -73,7 +73,7 @@ fileprivate func createPlaybackURL(playbackID: String,playbackOptions: PlaybackO
             components.host = "\(customDomain)"
             components.path = "/\(playbackID).m3u8"
         } else {
-            components.host = "stream.fastpix.io"
+            components.host = "stream.fastpix.com"
             components.path = "/\(playbackID).m3u8"
         }
     }
@@ -201,7 +201,7 @@ internal extension AVPlayerItem {
     // references your FastPix Video at the supplied playback ID.
     // The playback ID must be public.
     //
-    // This initializer uses https://stream.fastpix.io as the
+    // This initializer uses https://stream.fastpix.com as the
     // base URL. Use a different initializer if using a custom
     // playback URL.
     //

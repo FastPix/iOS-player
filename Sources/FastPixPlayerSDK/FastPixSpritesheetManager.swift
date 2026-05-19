@@ -110,50 +110,7 @@ public final class FastPixSpritesheetManager {
     }
     
     // MARK: - Entry point used by AVPlayerViewController
-    
-//        func load(url: URL?, config: FastPixSeekPreviewConfig) {
-//    
-//            // 1) If caller passes explicit spritesheet JSON URL, use that.
-//            if let customURL = url {
-//                loadCustomSpritesheet(from: customURL)
-//                return
-//            }
-//    
-//            guard let playbackItem = player?.currentItem,
-//                  let assetURL = (playbackItem.asset as? AVURLAsset)?.url else {
-//                previewMode = .timestamp
-//                return
-//            }
-//    
-//            guard let playbackID = extractPlaybackID(from: assetURL) else {
-//                previewMode = .timestamp
-//                return
-//            }
-//    
-//            //Choose images host based on stream host
-//            let imagesHost: String
-//            switch assetURL.host {
-//            case "stream.fastpix.io":
-//                imagesHost = "images.fastpix.io"
-//            case "stream.fastpix.app":
-//                imagesHost = "images.fastpix.app"
-//            case "venus-stream.fastpix.dev":
-//                imagesHost = "venus-images.fastpix.dev"
-//            default:
-//                // Fallback or bail out
-//                previewMode = .timestamp
-//                return
-//            }
-//    
-//            let jsonString = "https://\(imagesHost)/\(playbackID)/spritesheet.json"
-//            guard let jsonURL = URL(string: jsonString) else {
-//                previewMode = .timestamp
-//                return
-//            }
-//            print("The Spritesheet jSON URL",jsonURL)
-//            loadCustomSpritesheet(from: jsonURL)
-//        }
-    
+
     func load(url: URL?, config: FastPixSeekPreviewConfig) {
         
         // 1) If caller passes explicit spritesheet JSON URL, use that.
@@ -181,6 +138,8 @@ public final class FastPixSpritesheetManager {
         switch assetURL.host {
         case "stream.fastpix.io":
             imagesHost = "images.fastpix.io"
+        case "stream.fastpix.com":
+            imagesHost = "images.fastpix.com"
         case "stream.fastpix.app":
             imagesHost = "images.fastpix.app"
         case "venus-stream.fastpix.dev":
