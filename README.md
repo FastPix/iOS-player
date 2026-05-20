@@ -7,13 +7,13 @@ The FastPix iOS Player SDK is a flexible solution for integrating .m3u8 video st
 
 To get started with the FastPix Player SDK, follow these steps:
 
-- **Log in to the FastPix Dashboard**: Navigate to the [FastPix-Dashboard](https://dashboard.fastpix.io) and log in with your credentials.
-- **Create Media**: Start by creating a media using a pull or push method. You can also use our APIs for [Push media](https://docs.fastpix.io/docs/upload-videos-directly) or [Pull media](https://docs.fastpix.io/docs/upload-videos-from-url).
+- **Log in to the FastPix Dashboard**: Navigate to the [FastPix-Dashboard](https://dashboard.fastpix.com) and log in with your credentials.
+- **Create Media**: Start by creating a media using a pull or push method. You can also use our APIs for [Push media](https://docs.fastpix.com/docs/upload-videos-directly) or [Pull media](https://docs.fastpix.com/docs/upload-videos-from-url).
 - **Retrieve Media Details**: After creation, access the media details by navigating to the "View Media" page.
 - **Get Playback ID**: From the media details, obtain the playback ID.
 - **Play Video**: Use the playback ID in the FastPix-player to play the video seamlessly.
 
-[Explore our detailed guide](https://docs.fastpix.io/docs/get-started-in-5-minutes) to upload videos and getting a playback ID using FastPix APIs
+[Explore our detailed guide](https://docs.fastpix.com/docs/get-started-in-5-minutes) to upload videos and getting a playback ID using FastPix APIs
 
 # Installation
 
@@ -37,7 +37,7 @@ import FastPixPlayerSDK
 
 FastPix iOS Player SDK supports all the features mentioned below, ensuring easy integration, enhanced playback performance, and a customizable streaming experience for iOS applications.
 
-[Click here](https://docs.fastpix.io/docs/overview-and-features) for a detailed overview.
+[Click here](https://docs.fastpix.com/docs/overview-and-features) for a detailed overview.
 
 ## Media Playback: 
 
@@ -198,7 +198,7 @@ playerViewController.enableAnalytics(
 FastPixPlayer supports DRM-encrypted playback using FairPlay.  
 To enable DRM, follow the guide below and include token (playback token), drm-token (DRM license JWT), licenseURL (DRM license server URL), and certificateURL (FairPlay application certificate URL) as attributes.  
 
-[Secure Playback with DRM – FastPix Documentation](https://docs.fastpix.io/docs/secure-playback-with-drm#/)
+[Secure Playback with DRM – FastPix Documentation](https://docs.fastpix.com/docs/secure-playback-with-drm#/)
 
 ```swift
 
@@ -1449,7 +1449,7 @@ class TVPlayerViewController: UIViewController {
 
 # Documentation 
 
-[Click here](https://docs.fastpix.io/docs/ios-player) for a detailed documentation on FastPix Player SDK for iOS.
+[Click here](https://docs.fastpix.com/docs/ios-player) for a detailed documentation on FastPix Player SDK for iOS.
 
 # Development
 
