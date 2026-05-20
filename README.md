@@ -198,7 +198,7 @@ playerViewController.enableAnalytics(
 FastPixPlayer supports DRM-encrypted playback using FairPlay.  
 To enable DRM, follow the guide below and include token (playback token), drm-token (DRM license JWT), licenseURL (DRM license server URL), and certificateURL (FairPlay application certificate URL) as attributes.  
 
-[Secure Playback with DRM – FastPix Documentation](https://docs.fastpix.com/docs/secure-playback-with-drm#/)
+[Secure Playback with DRM – FastPix Documentation](https://fastpix.com/docs/video-security/set-up-drm-encryption#/)
 
 ```swift
 
