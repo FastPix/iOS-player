@@ -1,0 +1,24 @@
+{
+  "originHash" : "a67db6894877f3d4efee4bf638070d45fc2737b8af5efea503294484cd1f859a",
+  "pins" : [
+    {
+      "identity" : "ios-core-data-sdk",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/FastPix/iOS-core-data-sdk.git",
+      "state" : {
+        "revision" : "1c349f3095ebd15d6fa221bc8f4d0456a95f7b1f",
+        "version" : "1.0.6"
+      }
+    },
+    {
+      "identity" : "ios-data-avplayer-sdk",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/FastPix/iOS-data-avplayer-sdk",
+      "state" : {
+        "revision" : "1eab915f7140c90ec80dafd59313d304c6c9fbde",
+        "version" : "1.0.7"
+      }
+    }
+  ],
+  "version" : 3
+}

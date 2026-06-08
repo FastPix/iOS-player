@@ -1,4 +1,3 @@
-
 import AVFoundation
 import UIKit
 
@@ -287,22 +286,13 @@ public final class FastPixQualityManager {
         
         guard let item = player?.currentItem,
               let event = item.accessLog()?.events.last else { return }
-        
-        let indicated = event.indicatedBitrate
-        let observed = event.observedBitrate
-        let resolution = event.indicatedBitrate > 0 ? "\(Int(indicated/1000)) kbps" : "N/A"
-        
-        //CRITICAL: Re-enforce manual quality
+
+        // Re-enforce manual quality if ABR is disabled
         if !isAutoMode {
             reapplyQualityIfNeeded()
         }
-        
-//        print("""
-//           ABR INFO
-//           Observed: \(observed)
-//           Indicated: \(indicated)
-//           Resolution (approx): \(resolution)
-//           """)
+
+        _ = event.indicatedBitrate
     }
     
     deinit {

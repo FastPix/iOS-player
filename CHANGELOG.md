@@ -3,6 +3,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.2]
+
+- Code standardization updates applied across the SDK to align with best practices and strengthen overall stability.
+- Updated iOS Data Core SDK.
+
 ## [1.1.1]
 
 ### Domain migration: `fastpix.io` → `fastpix.com`
@@ -11,7 +16,7 @@ All SDK-managed default service endpoints have been migrated from the `.io` doma
 
 - **HLS playback host** – default stream base changed from `https://stream.fastpix.io` to `https://stream.fastpix.com` for both on-demand and live streams, and for episode switching in the playlist flow.
 - **DRM endpoints** – Widevine license, FairPlay license, and FairPlay certificate URLs now resolve under `https://api.fastpix.com/v1/on-demand/drm/...` (previously `api.fastpix.io`).
-- **Spritesheet / poster host** – `spritesheet-src` default updated from `images.fastpix.io` to `images.fastpix.com`. Consumers that explicitly set `spritesheet-src` are unaffected..
+- **Spritesheet / poster host** – `spritesheet-src` default updated from `images.fastpix.io` to `images.fastpix.com`. Consumers that explicitly set `spritesheet-src` are unaffected.
 
 > **Note:** Existing `.io` domains remain temporarily supported for backward compatibility but are planned for future deprecation. Migrating to `.com` endpoints is strongly recommended.
 

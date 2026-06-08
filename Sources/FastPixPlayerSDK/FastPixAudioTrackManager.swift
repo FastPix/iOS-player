@@ -1,4 +1,3 @@
-
 import AVFoundation
 
 public struct AudioTrack {
@@ -162,15 +161,14 @@ public class FastPixAudioTrackManager {
         guard !didApplyInitialSelection else { return }
         didApplyInitialSelection = true
         
-        // 1️⃣ Match by languageName
+        //Match by languageName
         if let preferredName = preferredLanguageName,
            let preferredTrack = tracks.first(where: {
-               $0.languageName.lowercased() == preferredName.lowercased()  // case-insensitive match
+               $0.languageName.lowercased() == preferredName.lowercased()
            }) {
             try? selectTrack(trackId: preferredTrack.id)
-            return
         }
         
-        // 2️⃣ Otherwise do nothing — AVPlayer already selected manifest default
+        //Otherwise do nothing — AVPlayer already selected manifest default
     }
 }

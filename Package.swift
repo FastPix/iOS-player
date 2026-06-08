@@ -19,7 +19,7 @@ let package = Package(
     
     dependencies: [
         // Add the Git URL package dependency here
-        .package(url: "https://github.com/FastPix/iOS-data-avplayer-sdk", from: "1.0.6")
+        .package(url: "https://github.com/FastPix/iOS-data-avplayer-sdk", from: "1.0.7")
     ],
     
     targets: [

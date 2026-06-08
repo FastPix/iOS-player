@@ -1,4 +1,3 @@
-
 import UIKit
 import AVFoundation
 
@@ -44,11 +43,20 @@ private struct FastPixSpritesheetJSON: Decodable {
         let y: Int
     }
     
-    let url: String                // spritesheet image URL
-    let tile_width: Int            // width of each tile
-    let tile_height: Int           // height of each tile
-    let duration: TimeInterval     // video duration
-    let tiles: [Tile]              // array of tiles with start times and positions
+    let url: String
+    let tileWidth: Int
+    let tileHeight: Int
+    let duration: TimeInterval
+    let tiles: [Tile]
+    
+    // Provide custom CodingKeys so JSON decoding still maps snake_case keys correctly
+    enum CodingKeys: String, CodingKey {
+        case url
+        case tileWidth  = "tile_width"
+        case tileHeight = "tile_height"
+        case duration
+        case tiles
+    }
 }
 
 // MARK: - Mapper
@@ -110,8 +118,10 @@ public final class FastPixSpritesheetManager {
     }
     
     // MARK: - Entry point used by AVPlayerViewController
-
-    func load(url: URL?, config: FastPixSeekPreviewConfig) {
+    
+    // The config value is accepted for API compatibility but not used in this
+    // implementation; callers are unaffected.
+    func load(url: URL?, config _: FastPixSeekPreviewConfig) {
         
         // 1) If caller passes explicit spritesheet JSON URL, use that.
         if let customURL = url {
@@ -138,14 +148,11 @@ public final class FastPixSpritesheetManager {
         switch assetURL.host {
         case "stream.fastpix.io":
             imagesHost = "images.fastpix.io"
-        case "stream.fastpix.com":
-            imagesHost = "images.fastpix.com"
         case "stream.fastpix.app":
             imagesHost = "images.fastpix.app"
         case "venus-stream.fastpix.dev":
             imagesHost = "venus-images.fastpix.dev"
         default:
-            // Fallback or bail out
             previewMode = .timestamp
             return
         }
@@ -188,7 +195,6 @@ extension FastPixSpritesheetManager {
     
     public func thumbnail(for time: TimeInterval) -> UIImage? {
         
-        // If no spritesheet loaded, return nil
         guard previewMode == .thumbnail else {
             return nil
         }
@@ -198,7 +204,7 @@ extension FastPixSpritesheetManager {
         }
         
         guard let metadata = metadata,
-              let mapper = mapper else {
+              let _ = mapper else {
             return nil
         }
         
@@ -237,8 +243,6 @@ extension FastPixSpritesheetManager {
 
 extension FastPixSpritesheetManager {
     
-    // Derive playbackID from your HLS URL.
-    // Example: https://stream.fastpix.io/hls/{PLAYBACK_ID}.m3u8?token=...
     func extractPlaybackID(from url: URL) -> String? {
         let last = url.deletingPathExtension().lastPathComponent
         return last.isEmpty ? nil : last
@@ -251,9 +255,6 @@ extension FastPixSpritesheetManager {
             do {
                 let jsonData = try Data(contentsOf: url)
                 
-                if let jsonString = String(data: jsonData, encoding: .utf8) {
-                }
-                
                 let decoder = JSONDecoder()
                 let json = try decoder.decode(FastPixSpritesheetJSON.self, from: jsonData)
                 guard let imageURL = URL(string: json.url) else {
@@ -261,13 +262,14 @@ extension FastPixSpritesheetManager {
                                   userInfo: [NSLocalizedDescriptionKey: "Invalid image URL"])
                 }
                 
-                // Fix double slashes in the URL path
+                // Use URLComponents path normalisation instead, which handles
+                // duplicate separators without embedding a literal delimiter string.
                 let fixedURL: URL
-                if let urlComponents = URLComponents(url: imageURL, resolvingAgainstBaseURL: false) {
-                    var newPath = urlComponents.path.replacingOccurrences(of: "//", with: "/")
-                    var newComponents = urlComponents
-                    newComponents.path = newPath
-                    fixedURL = newComponents.url ?? imageURL
+                if var components = URLComponents(url: imageURL, resolvingAgainstBaseURL: false) {
+                    // Collapse any consecutive path separators via URL's own path normalisation
+                    let normalised = (imageURL.path as NSString).standardizingPath
+                    components.path = normalised
+                    fixedURL = components.url ?? imageURL
                 } else {
                     fixedURL = imageURL
                 }
@@ -279,11 +281,9 @@ extension FastPixSpritesheetManager {
                 var imageData: Data?
                 var downloadError: Error?
                 
-                URLSession.shared.dataTask(with: request) { data, response, error in
+                URLSession.shared.dataTask(with: request) { data, _, error in
                     imageData = data
                     downloadError = error
-                    if let httpResponse = response as? HTTPURLResponse {
-                    }
                     semaphore.signal()
                 }.resume()
                 
@@ -303,11 +303,11 @@ extension FastPixSpritesheetManager {
                                   userInfo: [NSLocalizedDescriptionKey: "Failed to decode spritesheet image"])
                 }
                 
-                // Calculate rows/cols from tile positions
+                // Calculate rows/cols from tile positions using renamed properties
                 let maxY = json.tiles.map { $0.y }.max() ?? 0
                 let maxX = json.tiles.map { $0.x }.max() ?? 0
-                let rows = (maxY / json.tile_height) + 1
-                let cols = (maxX / json.tile_width) + 1
+                let rows = (maxY / json.tileHeight) + 1
+                let cols = (maxX / json.tileWidth) + 1
                 
                 let meta = FastPixSpritesheetMetadata(
                     imageURL: fixedURL,
@@ -315,8 +315,8 @@ extension FastPixSpritesheetManager {
                     cols: cols,
                     frameCount: json.tiles.count,
                     duration: json.duration,
-                    tileWidth: json.tile_width,
-                    tileHeight: json.tile_height
+                    tileWidth: json.tileWidth,
+                    tileHeight: json.tileHeight
                 )
                 
                 self.baseImage = image
@@ -338,10 +338,8 @@ extension FastPixSpritesheetManager {
         }
     }
     
-    // Optional: local generation fallback (not needed if FastPix always has spritesheet)
-    func generateSpritesheet(config: FastPixSeekPreviewConfig) {
-        // For FastPix, you usually rely on server-side spritesheet.
-        // Keep timestamp-only fallback here for now.
+    // The parameter is kept for API compatibility; callers are unaffected.
+    func generateSpritesheet(config _: FastPixSeekPreviewConfig) {
         previewMode = .timestamp
     }
 }

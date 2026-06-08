@@ -1,4 +1,3 @@
-
 import AVFoundation
 
 // MARK: - Models
@@ -121,12 +120,18 @@ internal final class FastPixWebVTTParser {
             let newCues = self.parseWebVTT(text: text)
             
             DispatchQueue.main.async {
-                let existingKeys = Set(self.currentCues.map { "\($0.start)-\($0.end)" })
-                let toAdd = newCues.filter { !existingKeys.contains("\($0.start)-\($0.end)") }
-                self.currentCues.append(contentsOf: toAdd)
-                self.currentCues.sort { $0.start < $1.start }
+                self.mergeCues(newCues)
             }
         }.resume()
+    }
+    
+    // Extracted from fetchVTTSegment to avoid exceeding 2 closure nesting levels.
+    // Merges newly fetched cues into currentCues, deduplicating by start-end key,
+    private func mergeCues(_ newCues: [(start: Double, end: Double, text: String)]) {
+        let existingKeys = Set(currentCues.map { "\($0.start)-\($0.end)" })
+        let toAdd = newCues.filter { !existingKeys.contains("\($0.start)-\($0.end)") }
+        currentCues.append(contentsOf: toAdd)
+        currentCues.sort { $0.start < $1.start }
     }
     
     // MARK: - WebVTT Parser
@@ -220,12 +225,9 @@ internal final class FastPixWebVTTParser {
 }
 
 // MARK: - Manifest Parser (Internal)
-// Fetches the master .m3u8 and extracts subtitle playlist URLs by language
 
 internal struct FastPixManifestParser {
     
-    /// Parses an HLS master manifest and returns a map of [languageCode: subtitlePlaylistURL]
-    /// e.g. ["fr": "https://...stream_French_subtitle.m3u8", "en": "https://..."]
     static func extractSubtitleURLs(
         from manifestURL: String,
         completion: @escaping ([String: String]) -> Void
@@ -248,8 +250,6 @@ internal struct FastPixManifestParser {
         }.resume()
     }
     
-    /// Parses raw manifest text for EXT-X-MEDIA TYPE=SUBTITLES lines
-    /// and extracts LANGUAGE + URI pairs
     private static func parse(
         manifestText: String,
         baseURL: String
@@ -266,21 +266,17 @@ internal struct FastPixManifestParser {
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             
-            // Only process subtitle media lines
             guard trimmed.hasPrefix("#EXT-X-MEDIA"),
                   trimmed.contains("TYPE=SUBTITLES") else { continue }
             
-            // Extract LANGUAGE="xx"
             guard let language = extractAttribute("LANGUAGE", from: trimmed) else {
                 continue
             }
             
-            // Extract URI="..."
             guard let uri = extractAttribute("URI", from: trimmed) else {
                 continue
             }
             
-            // Resolve relative URLs
             let resolvedURI = uri.hasPrefix("http") ? uri : "\(base)/\(uri)"
             subtitleURLs[language] = resolvedURI
         }
@@ -288,18 +284,14 @@ internal struct FastPixManifestParser {
         return subtitleURLs
     }
     
-    /// Extracts the value of a named attribute from an HLS tag line
-    /// e.g. extractAttribute("LANGUAGE", from: #EXT-X-MEDIA:...,LANGUAGE="fr",...) → "fr"
     private static func extractAttribute(
         _ key: String,
         from line: String
     ) -> String? {
         
-        // Match KEY="value" or KEY=value
         let pattern = "\(key)=\"([^\"]+)\""
         
         guard let range = line.range(of: pattern, options: .regularExpression) else {
-            // Try unquoted fallback e.g. LANGUAGE=fr
             let plainPattern = "\(key)=([^,\\s]+)"
             guard let plainRange = line.range(of: plainPattern, options: .regularExpression) else {
                 return nil
@@ -326,19 +318,17 @@ public final class FastPixSubtitleTrackManager: NSObject {
     private var vttParser: FastPixWebVTTParser?
     private var trackedItem: AVPlayerItem?
     
-    // Keyed by languageCode e.g. ["fr": "https://...m3u8", "en": "https://...m3u8"]
     private var subtitleURLMap: [String: String] = [:]
     
     public weak var delegate: FastPixSubtitleTrackDelegate?
     
-    private var preferredLanguageName: String?      // ← ADD THIS
-    private var didApplyInitialSelection = false    // ← ADD THIS
+    private var preferredLanguageName: String?
+    private var didApplyInitialSelection = false
     
-    public func setPreferredSubtitleTrack(languageName: String?) {   // ← ADD THIS
+    public func setPreferredSubtitleTrack(languageName: String?) {
         preferredLanguageName = languageName
     }
     
-    /// Returns the label of the active track, or nil if subtitles are off
     public var currentSubtitleLabel: String? {
         getCurrentSubtitleTrack()?.label
     }
@@ -355,7 +345,6 @@ public final class FastPixSubtitleTrackManager: NSObject {
     
     // MARK: - Attach
     
-    /// Call this whenever the player or its current item changes (e.g. playlist switch)
     public func attach(player: AVPlayer?) {
         detach()
         self.player = player
@@ -374,12 +363,11 @@ public final class FastPixSubtitleTrackManager: NSObject {
     
     // MARK: - Detach
     
-    /// Call this on playlist change, viewWillDisappear, or deinit
     public func detach() {
         vttParser?.stopTracking()
         vttParser = nil
         subtitleURLMap = [:]
-        didApplyInitialSelection = false // Added
+        didApplyInitialSelection = false
         trackedItem?.removeObserver(self, forKeyPath: "status")
         trackedItem = nil
     }
@@ -389,8 +377,8 @@ public final class FastPixSubtitleTrackManager: NSObject {
     public override func observeValue(
         forKeyPath keyPath: String?,
         of object: Any?,
-        change: [NSKeyValueChangeKey: Any]?,
-        context: UnsafeMutableRawPointer?
+        change _: [NSKeyValueChangeKey: Any]?,
+        context _: UnsafeMutableRawPointer?
     ) {
         guard keyPath == "status",
               let item = object as? AVPlayerItem,
@@ -419,7 +407,6 @@ public final class FastPixSubtitleTrackManager: NSObject {
             return
         }
         
-        // Step 1: Build tracks from AVFoundation (no URLs yet)
         let currentOption = item.currentMediaSelection.selectedMediaOption(in: group)
         
         let avTracks: [(option: AVMediaSelectionOption, track: SubtitleTrack)] =
@@ -434,7 +421,6 @@ public final class FastPixSubtitleTrackManager: NSObject {
             return (option, track)
         }
         
-        // Step 2: Fetch the master manifest to extract subtitle playlist URLs
         guard let urlAsset = item.asset as? AVURLAsset else {
             delegate?.onSubtitlesLoadedFailed(error: .noTracksAvailable)
             return
@@ -447,7 +433,6 @@ public final class FastPixSubtitleTrackManager: NSObject {
             
             self.subtitleURLMap = urlMap
             
-            // Step 3: Rebuild tracks with resolved URLs
             let tracks: [SubtitleTrack] = avTracks.map { (_, track) in
                 SubtitleTrack(
                     id: track.id,
@@ -461,35 +446,49 @@ public final class FastPixSubtitleTrackManager: NSObject {
             tracks.forEach { print("  •", $0.label, "[\($0.languageCode)]", "→", $0.playlistURL ?? "no URL") }
             
             self.delegate?.onSubtitlesLoaded(tracks: tracks)
-            
             self.applyPreferredOrDefaultTrack(from: tracks)
         }
     }
     
+    // MARK: - Track Selection Helpers
+    
+    /// Returns the preferred track if a preferred language name is set and
+    /// a matching track with a valid playlistURL exists. Extracted to keep
+    /// `applyPreferredOrDefaultTrack` under the 2-closure-nesting limit.
+    private func findPreferredTrack(from tracks: [SubtitleTrack]) -> SubtitleTrack? {
+        guard let preferredName = preferredLanguageName else { return nil }
+        return tracks.first {
+            $0.label.lowercased() == preferredName.lowercased() && $0.playlistURL != nil
+        }
+    }
+    
+    /// Returns the first already-selected track that has a valid playlistURL,
+    /// matching the AVFoundation default selection. Extracted to keep
+    /// `applyPreferredOrDefaultTrack` under the 2-closure-nesting limit.
+    private func findDefaultSelectedTrack(from tracks: [SubtitleTrack]) -> SubtitleTrack? {
+        return tracks.first { $0.isSelected && $0.playlistURL != nil }
+    }
+    
+    // expressions. Logic extracted into findPreferredTrack and
+    // findDefaultSelectedTrack helpers to flatten nesting to a single level.
     private func applyPreferredOrDefaultTrack(from tracks: [SubtitleTrack]) {
         guard !didApplyInitialSelection else { return }
         didApplyInitialSelection = true
         
-        // 1️⃣ Try preferred language name first (case-insensitive)
-        if let preferredName = preferredLanguageName,
-           let preferredTrack = tracks.first(where: {
-               $0.label.lowercased() == preferredName.lowercased()
-           }),
-           let url = preferredTrack.playlistURL {
+        //Try preferred language name first (case-insensitive)
+        if let preferredTrack = findPreferredTrack(from: tracks) {
             try? setSubtitleTrack(trackId: preferredTrack.id)
             return
         }
         
-        // 2️⃣ Fall back to whatever AVFoundation already selected
-        if let selected = tracks.first(where: { $0.isSelected }),
-           let url = selected.playlistURL {
-            startParser(for: selected, playlistURL: url)
-        }
+        //Fall back to whatever AVFoundation already selected
+        guard let selected = findDefaultSelectedTrack(from: tracks),
+              let url = selected.playlistURL else { return }
+        startParser(for: selected, playlistURL: url)
     }
     
     // MARK: - Public API
     
-    /// Returns all available subtitle tracks for the current player item
     public func getSubtitleTracks() -> [SubtitleTrack] {
         guard let item = player?.currentItem,
               let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .legible)
@@ -509,7 +508,6 @@ public final class FastPixSubtitleTrackManager: NSObject {
         }
     }
     
-    /// Returns the currently active subtitle track, or nil if subtitles are off
     public func getCurrentSubtitleTrack() -> SubtitleTrack? {
         guard let item = player?.currentItem,
               let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .legible),
@@ -526,7 +524,6 @@ public final class FastPixSubtitleTrackManager: NSObject {
         )
     }
     
-    /// Switch to a subtitle track by its id (languageCode or displayName)
     public func setSubtitleTrack(trackId: String) throws {
         guard let item = player?.currentItem,
               let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .legible)
@@ -556,7 +553,6 @@ public final class FastPixSubtitleTrackManager: NSObject {
         delegate?.onSubtitleChange(track: selected)
     }
     
-    /// Turn off subtitles entirely
     public func disableSubtitles() {
         guard let item = player?.currentItem,
               let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .legible)
@@ -575,7 +571,7 @@ public final class FastPixSubtitleTrackManager: NSObject {
     
     // MARK: - Private Helpers
     
-    private func startParser(for track: SubtitleTrack, playlistURL: String) {
+    private func startParser(for _: SubtitleTrack, playlistURL: String) {
         vttParser?.stopTracking()
         vttParser = FastPixWebVTTParser(player: player)
         vttParser?.delegate = delegate

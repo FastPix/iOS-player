@@ -1,4 +1,3 @@
-
 import AVKit
 import UIKit
 
@@ -62,17 +61,18 @@ public final class FastPixPiPManager: NSObject, AVPictureInPictureControllerDele
     }
     
     // MARK: – Delegate methods
-    public func pictureInPictureControllerDidStartPictureInPicture(_ controller: AVPictureInPictureController) {
+
+    public func pictureInPictureControllerDidStartPictureInPicture(_ _: AVPictureInPictureController) {
         delegate?.onPiPEnter()
         delegate?.onPiPStateChanged(isActive: true)
     }
     
-    public func pictureInPictureControllerDidStopPictureInPicture(_ controller: AVPictureInPictureController) {
+    public func pictureInPictureControllerDidStopPictureInPicture(_ _: AVPictureInPictureController) {
         delegate?.onPiPExit()
         delegate?.onPiPStateChanged(isActive: false)
     }
     
-    public func pictureInPictureController(_ controller: AVPictureInPictureController,
+    public func pictureInPictureController(_ _: AVPictureInPictureController,
                                            failedToStartPictureInPictureWithError error: Error) {
         delegate?.onPiPSessionError(error: error)
     }
