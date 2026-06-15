@@ -8,12 +8,12 @@ The FastPix iOS Player SDK is a flexible solution for integrating .m3u8 video st
 To get started with the FastPix Player SDK, follow these steps:
 
 - **Log in to the FastPix Dashboard**: Navigate to the [FastPix-Dashboard](https://dashboard.fastpix.com) and log in with your credentials.
-- **Create Media**: Start by creating a media using a pull or push method. You can also use our APIs for [Push media](https://docs.fastpix.com/docs/upload-videos-directly) or [Pull media](https://docs.fastpix.com/docs/upload-videos-from-url).
+- **Create Media**: Start by creating a media using a pull or push method. You can also use our APIs for [Push media](https://fastpix.com/docs/upload-videos/upload-videos-from-device) or [Pull media](https://fastpix.com/docs/upload-videos/upload-videos-from-a-url).
 - **Retrieve Media Details**: After creation, access the media details by navigating to the "View Media" page.
 - **Get Playback ID**: From the media details, obtain the playback ID.
 - **Play Video**: Use the playback ID in the FastPix-player to play the video seamlessly.
 
-[Explore our detailed guide](https://docs.fastpix.com/docs/get-started-in-5-minutes) to upload videos and getting a playback ID using FastPix APIs
+[Explore our detailed guide](https://fastpix.com/docs/get-started/quickstart) to upload videos and getting a playback ID using FastPix APIs
 
 # Installation
 
@@ -37,7 +37,6 @@ import FastPixPlayerSDK
 
 FastPix iOS Player SDK supports all the features mentioned below, ensuring easy integration, enhanced playback performance, and a customizable streaming experience for iOS applications.
 
-[Click here](https://docs.fastpix.com/docs/overview-and-features) for a detailed overview.
 
 ## Media Playback: 
 
@@ -1449,7 +1448,7 @@ class TVPlayerViewController: UIViewController {
 
 # Documentation 
 
-[Click here](https://docs.fastpix.com/docs/ios-player) for a detailed documentation on FastPix Player SDK for iOS.
+[Click here](https://fastpix.com/docs/ios-player/install-fastpix-ios-player) for a detailed documentation on FastPix Player SDK for iOS.
 
 # Development
 
