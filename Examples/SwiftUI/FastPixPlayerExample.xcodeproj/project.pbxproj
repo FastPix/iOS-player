@@ -10,6 +10,10 @@
 		A0000010 /* FastPixPlayerSDK in Frameworks */ = {isa = PBXBuildFile; productRef = A0000009 /* FastPixPlayerSDK */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXFileReference section */
+		A0000005 /* FastPixPlayerExample.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FastPixPlayerExample.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A0000006 /* FastPixPlayerExample */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = FastPixPlayerExample; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
