@@ -2,6 +2,15 @@ import Foundation
 import AVKit
 import FastpixVideoDataAVPlayer
 
+/// Debug-only pre-render trace. Compiled out of release builds so the diagnostic
+/// `[PreRender]` chatter never ships. Uses `%@` to avoid format-string injection.
+@inline(__always)
+internal func fpxPreRenderLog(_ message: @autoclosure () -> String) {
+    #if DEBUG
+    NSLog("[PreRender] %@", message())
+    #endif
+}
+
 public protocol FastPixPlayerDelegate: AnyObject {
     func playerDidStartPlaying(_ player: AVPlayerViewController)
     func playerDidPause(_ player: AVPlayerViewController)
@@ -274,12 +283,23 @@ extension AVPlayerViewController {
         
         let playerItem: AVPlayerItem
         if let drmOptions = playbackOptions.drmOptions {
-            playerItem = AVPlayerItem(
-                playbackID: playbackID,
-                playbackOptions: playbackOptions,
-                licenseServerUrl: drmOptions.licenseURL,
-                certificateUrl: drmOptions.certificateURL
-            )
+            if FastPixLicenseManager.shared.isEnabled(.drm) {
+                playerItem = AVPlayerItem(
+                    playbackID: playbackID,
+                    playbackOptions: playbackOptions,
+                    licenseServerUrl: drmOptions.licenseURL,
+                    certificateUrl: drmOptions.certificateURL
+                )
+            } else {
+                // Fail-closed: DRM requested but the "drm" paid feature is not
+                // licensed — do NOT wire the FairPlay license/certificate, so
+                // encrypted content stays locked until the license unlocks DRM.
+                NSLog("[FastPixLicense] DRM requested but 'drm' feature is not licensed — building item without FairPlay.")
+                playerItem = AVPlayerItem(
+                    playbackID: playbackID,
+                    playbackOptions: playbackOptions
+                )
+            }
         } else {
             playerItem = AVPlayerItem(
                 playbackID: playbackID,
@@ -297,12 +317,23 @@ extension AVPlayerViewController {
     public func prepare(playbackID: String, playbackOptions: PlaybackOptions) {
         let playerItem: AVPlayerItem
         if let drmOptions = playbackOptions.drmOptions {
-            playerItem = AVPlayerItem(
-                playbackID: playbackID,
-                playbackOptions: playbackOptions,
-                licenseServerUrl: drmOptions.licenseURL,
-                certificateUrl: drmOptions.certificateURL
-            )
+            if FastPixLicenseManager.shared.isEnabled(.drm) {
+                playerItem = AVPlayerItem(
+                    playbackID: playbackID,
+                    playbackOptions: playbackOptions,
+                    licenseServerUrl: drmOptions.licenseURL,
+                    certificateUrl: drmOptions.certificateURL
+                )
+            } else {
+                // Fail-closed: DRM requested but the "drm" paid feature is not
+                // licensed — do NOT wire the FairPlay license/certificate, so
+                // encrypted content stays locked until the license unlocks DRM.
+                NSLog("[FastPixLicense] DRM requested but 'drm' feature is not licensed — building item without FairPlay.")
+                playerItem = AVPlayerItem(
+                    playbackID: playbackID,
+                    playbackOptions: playbackOptions
+                )
+            }
         } else {
             playerItem = AVPlayerItem(
                 playbackID: playbackID,
@@ -316,13 +347,26 @@ extension AVPlayerViewController {
     internal func prepare(playerItem: AVPlayerItem) {
         
         var itemToUse = playerItem
-        
+
         if let urlAsset = playerItem.asset as? AVURLAsset,
-           let pid = fastpixExtractPlaybackID(from: urlAsset),
-           let cachedItem = preloadManager?.getPreloadedItem(for: pid) {
-            itemToUse = cachedItem
-            preloadManager?.notifyAutoAdvance(toId: pid)
-        } else { }
+           let pid = fastpixExtractPlaybackID(from: urlAsset) {
+            // Prefer a pre-rendered item (first frame already decoded) so promotion is
+            // visually instant; fall back to a preloaded item (warm bytes); else use the
+            // item as-is. Requirement: "First-frame decode ahead of display".
+            if isPreRenderEnabled, let renderedItem = preRenderManager?.consumePreRenderedItem(for: pid) {
+                itemToUse = renderedItem
+                preloadManager?.notifyAutoAdvance(toId: pid)
+                fpxPreRenderLog("CONSUMED pre-rendered item for \(pid) — promotion should be flash-free")
+            } else if let cachedItem = preloadManager?.getPreloadedItem(for: pid) {
+                itemToUse = cachedItem
+                preloadManager?.notifyAutoAdvance(toId: pid)
+                if isPreRenderEnabled {
+                    fpxPreRenderLog("no ready frame for \(pid) — fell back to preloaded (warm bytes)")
+                }
+            } else if isPreRenderEnabled {
+                fpxPreRenderLog("no ready frame or preload for \(pid) — loading fresh")
+            }
+        }
         
         // Attach item to player
         if let player {
@@ -366,12 +410,8 @@ extension AVPlayerViewController {
         }
         subtitleTrackManager?.delegate = subtitleTrackDelegate
         
-        if qualityManager == nil {
-            qualityManager = FastPixQualityManager(player: player)
-        } else {
-            qualityManager?.attach(player: player)
-        }
-        qualityManager?.delegate = qualityDelegate
+        // Gated behind the "quality" paid feature (see fastpixSetupQualityGated).
+        fastpixSetupQualityGated()
         
         setupVolumeManager()
         setupEndObserver()
@@ -380,6 +420,21 @@ extension AVPlayerViewController {
     }
     
     private func observeItemStallAndFailure(_ item: AVPlayerItem) {
+        // FR-16: typed container errors for hosts that never call a capability API.
+        // Pure addition - nothing previously observed `status == .failed` at all.
+        fastpixObserveItemForMediaErrors(item)
+        // FR-1: re-point audio content-kind detection at the new item. No-op unless the host has
+        // already touched `fastPixPlayer.audio` - this must not switch the capability on for
+        // every host in the SDK.
+        fastpixAttachAudioCapabilityIfActive(item)
+        // FR-13 / task 4.3: the previous item's decoded profiles describe the previous item's
+        // audio. Cancels any in-flight local computation too. Also a no-op for hosts that have
+        // never touched `fastPixPlayer.waveform`.
+        fastpixReleaseWaveformForItemChange()
+        // Re-points level metering at the new item and drops the previous item's peaks. Must run
+        // AFTER the waveform release above, so it cannot pick up peaks that are about to be
+        // invalidated. No-op unless the host has touched `fastPixPlayer.audioVisualizer`.
+        fastpixAttachAudioVisualizerIfActive(item)
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handlePlaybackStalled(_:)),
@@ -553,7 +608,7 @@ extension AVPlayerViewController {
         if !current.token.isEmpty {
             options.playbackPolicy = .signed(.init(playbackToken: current.token))
             
-            let base = "https://api.fastpix.com/v1/on-demand/drm"
+            let base = "https://api.fastpix.co/v1/on-demand/drm"
             let licence = "\(base)/license/fairplay/\(current.playbackId)?token=\(current.token)"
             let cert    = "\(base)/cert/fairplay/\(current.playbackId)?token=\(current.token)"
             
@@ -594,23 +649,57 @@ extension AVPlayerViewController {
     private struct FastPixPreloadKeys {
         static var preloadManager  = "fastpix_preload_manager"
         static var precacheManager = "fastpix_precache_manager"
+        static var preRenderManager = "fastpix_prerender_manager"
+        static var preRenderEnabled = "fastpix_prerender_enabled"
     }
-    
+
     public var preloadManager: PreloadManager? {
         get { objc_getAssociatedObject(self, &FastPixPreloadKeys.preloadManager) as? PreloadManager }
         set { objc_setAssociatedObject(self, &FastPixPreloadKeys.preloadManager, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
     }
-    
+
     public var precacheManager: PrecacheManager? {
         get { objc_getAssociatedObject(self, &FastPixPreloadKeys.precacheManager) as? PrecacheManager }
         set { objc_setAssociatedObject(self, &FastPixPreloadKeys.precacheManager, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
     }
-    
+
+    public var preRenderManager: FastPixPreRenderManager? {
+        get { objc_getAssociatedObject(self, &FastPixPreloadKeys.preRenderManager) as? FastPixPreRenderManager }
+        set { objc_setAssociatedObject(self, &FastPixPreloadKeys.preRenderManager, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
+    }
+
+    /// Opt-in switch for pre-rendering (Requirement: "Opt-in activation" — default OFF).
+    /// When false, no pre-render work is scheduled and no decoder/GPU resources are used.
+    public var isPreRenderEnabled: Bool {
+        get { (objc_getAssociatedObject(self, &FastPixPreloadKeys.preRenderEnabled) as? Bool) ?? false }
+        set { objc_setAssociatedObject(self, &FastPixPreloadKeys.preRenderEnabled, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
+    }
+
     /// Lazily initialises PreloadManager and PrecacheManager.
     /// Safe to call multiple times.
     public func setupPreloading() {
         if preloadManager == nil { preloadManager = PreloadManager() }
         if precacheManager == nil { precacheManager = PrecacheManager() }
+    }
+
+    /// Lazily initialises the pre-render manager and wires it to the preload manager for
+    /// the composition/degrade path. Safe to call multiple times. No-op unless
+    /// `isPreRenderEnabled` is set by the host.
+    public func setupPreRendering() {
+        guard isPreRenderEnabled else { return }
+        setupPreloading()
+        if preRenderManager == nil { preRenderManager = FastPixPreRenderManager() }
+        preRenderManager?.preloadManager = preloadManager
+    }
+
+    /// Current pre-render status for a given playbackId.
+    public func preRenderStatus(forId id: String) -> PreRenderStatus {
+        return preRenderManager?.preRenderStatus(forId: id) ?? .idle
+    }
+
+    /// Manually cancel a pre-render for a given playbackId.
+    public func cancelPreRender(forId id: String) {
+        preRenderManager?.cancel(for: id)
     }
     
     /// Enable or disable video segment caching.
@@ -686,13 +775,32 @@ extension AVPlayerViewController {
                 preloadManager?.preload(playerItem: item, identifier: nextItem.playbackId)
             }
         }
-        
+
+        // Pre-render only the immediate next item (heavier than byte warming; bounded by
+        // the manager's maxConcurrent). Requirement: "First-frame decode ahead of display".
+        if isPreRenderEnabled {
+            setupPreRendering()
+            let next = manager.items[currentIndex + 1]
+            if case .idle = preRenderManager?.preRenderStatus(forId: next.playbackId) ?? .idle {
+                var options = PlaybackOptions()
+                if !next.customDomain.isEmpty { options.customDomain = next.customDomain }
+                if !next.token.isEmpty {
+                    options.playbackPolicy = .signed(.init(playbackToken: next.token))
+                }
+                let renderItem = AVPlayerItem(playbackID: next.playbackId, playbackOptions: options)
+                fpxPreRenderLog("SDK look-ahead scheduling \(next.playbackId)")
+                preRenderManager?.preRender(playerItem: renderItem, identifier: next.playbackId)
+            }
+        }
+
         // Cancel stale preload for the item before current to free memory
         if currentIndex > 0 {
             let stale = manager.items[currentIndex - 1]
             if case .loading = preloadManager?.preloadStatus(forVideo: stale.playbackId) ?? .idle {
                 preloadManager?.cancelPreload(for: stale.playbackId)
             }
+            // Release any pre-render resources for the item we've scrolled past.
+            preRenderManager?.cancel(for: stale.playbackId)
         }
     }
 }
@@ -1356,11 +1464,10 @@ extension AVPlayerViewController {
     }
     
     public func setupQualityManager(delegate: FastPixQualityDelegate? = nil) {
-        guard let player = self.player else { return }
-        let manager = FastPixQualityManager(player: player)
-        manager.delegate = qualityDelegate
-        manager.attach(player: player)
-        qualityManager = manager
+        if let delegate { qualityDelegate = delegate }
+        // Gated: only stands up the quality manager if the "quality" paid
+        // feature is licensed; otherwise remembered and activated on unlock.
+        fastpixSetupQualityGated()
     }
     
     public func getResolutionLevels() -> [QualityLevel] { return qualityManager?.getResolutionLevels() ?? [] }
@@ -1423,3 +1530,4 @@ extension AVPlayerViewController {
         return enriched
     }
 }
+

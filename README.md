@@ -1392,6 +1392,111 @@ extension VideoPlayerViewController: PrecacheManagerDelegate {
 - Always call consumePreloadedItem(for:) before next() to hand off the buffered data to AVFoundation's URL session cache.
 - Call preloadManager.clearAll() and precacheManager.stopAllPrecaching() in deinit to avoid memory leaks and dangling background tasks.
 
+### Pre-rendering
+
+FastPix iOS Player SDK provides a **Pre-rendering** tier that decodes and holds the **first displayable video frame** of the upcoming item off-screen, so that when it is promoted to the active player the transition is **visually instant — no black flash** on the first frame. Where **Preloading** warms AVFoundation's byte cache and **Smart Caching** persists whole assets to disk, Pre-rendering goes one step further and pays the *decode* cost ahead of time using a shadow `AVPlayer` (held at rate `0`) plus an `AVPlayerItemVideoOutput`, retaining the decoded `CVPixelBuffer` until you promote the item.
+
+- Decodes and retains the first frame of the *very next* item so promotion never shows a black flash
+- **Opt-in** and **off by default** — enable per player via `isPreRenderEnabled`
+- **Bounded concurrency** (`maxConcurrent`, default `1`) to keep decode/memory cost predictable
+- SDK **auto-schedules** the immediate next item and **auto-consumes** the ready frame on promotion — no manual wiring in the playback path
+- On consume, vends a **fresh, unbonded `AVPlayerItem`** (never attached to the shadow player), avoiding AVFoundation single-owner crashes
+- **Graceful degrade**: DRM / FairPlay content and items whose bytes are still cold fall back to preload-only (byte warming) instead of pre-rendering
+- Automatically **releases** retained frames and shadow players on memory pressure / backgrounding
+
+All access goes through the shared singleton: `FastPixPreRenderManager.shared`.
+
+#### How it compares to the other look-ahead tiers
+
+| Tier | Warms | Pays decode cost early | Best for |
+|---|---|---|---|
+| **Preloading** | AVFoundation byte cache (shadow `AVPlayer`) | No | Faster initial buffering of the next item |
+| **Smart Caching** | Whole asset on disk | No | Instant start + offline availability |
+| **Pre-rendering** | First **decoded** frame (held in memory) | **Yes** | **Flash-free** promotion in scroll feeds |
+
+#### Enable pre-rendering
+
+Enable it **before** you add the playlist so the SDK can schedule the first look-ahead item as playback begins. Wire the shared manager to the player and, optionally, set yourself as the delegate to observe the lifecycle.
+
+```swift
+import FastPixPlayerSDK
+
+let preRenderManager = FastPixPreRenderManager.shared
+
+// Observe lifecycle callbacks (optional).
+preRenderManager.delegate = self
+
+// Let pre-render reuse the same warmed bytes as preloading.
+preRenderManager.preloadManager = preloadManager
+
+// Wire the manager to the player and turn the feature on (default: off).
+playerViewController.preRenderManager = preRenderManager
+playerViewController.isPreRenderEnabled = true
+
+// Enable BEFORE adding the playlist so the first look-ahead item is scheduled.
+playerViewController.addPlaylist(playlist)
+```
+
+Once enabled, the SDK owns scheduling and consumption end-to-end: it pre-renders the immediate next item, cancels stale entries as you scroll past them, and — when you navigate to a pre-rendered item — swaps in the ready first frame automatically. You do **not** need to consume it manually in your navigation handlers.
+
+#### Bound the decode cost
+
+```swift
+// Number of items pre-rendered concurrently. Heavier than preload's byte
+// warming, so this defaults to 1. Raise only if you have the memory headroom.
+FastPixPreRenderManager.shared.maxConcurrent = 1
+```
+
+#### Query status & cancel
+
+```swift
+// Current pre-render status for an item.
+let status = playerViewController.preRenderStatus(forId: playbackId) // PreRenderStatus
+
+// Cancel an in-flight pre-render (e.g. the user scrolled away).
+playerViewController.cancelPreRender(forId: playbackId)
+```
+
+`PreRenderStatus` is one of `.idle`, `.loading`, `.buffering`, `.frameReady`, `.failed(Error?)`, or `.cancelled`. Only a `.frameReady` item vends a decoded frame; every other state degrades safely to normal loading.
+
+#### Observe the pre-render lifecycle
+
+Conform to `FastPixPreRenderManagerDelegate` to observe when an item starts pre-rendering, becomes frame-ready, fails, or is cancelled.
+
+```swift
+extension VideoPlayerViewController: FastPixPreRenderManagerDelegate {
+    func videoPreRenderDidStart(forId id: String) {
+        print("[PreRender] started \(id)")
+    }
+    func videoPreRenderDidBecomeReady(forId id: String) {
+        // First frame decoded and retained — promotion of this item is now flash-free.
+        print("[PreRender] frame ready \(id)")
+    }
+    func videoPreRenderDidFail(forId id: String, error: Error?) {
+        // Degrades to normal loading; not fatal.
+        print("[PreRender] failed \(id): \(String(describing: error))")
+    }
+    func videoPreRenderDidCancel(forId id: String) {
+        print("[PreRender] cancelled \(id)")
+    }
+}
+```
+
+#### Release
+
+```swift
+// Release all retained frames and shadow players. Call in deinit.
+FastPixPreRenderManager.shared.clearAll()
+```
+
+> **NOTE:**
+> - Pre-rendering is **opt-in** (`isPreRenderEnabled` defaults to `false`); when off, playback behaves exactly as before.
+> - **DRM / FairPlay** items and items whose bytes are still **cold** are **not** pre-rendered — they degrade to preload-only (byte warming) and load normally, so there is no failure or crash.
+> - Concurrency is bounded by `maxConcurrent` (default `1`) to keep decode and memory cost predictable; a second look-ahead item waits for a free slot.
+> - On consume, the SDK hands back a **fresh, unbonded `AVPlayerItem`** — the shadow item stays owned by the manager, avoiding "player item already associated with another player" crashes.
+> - Retained frames and shadow players are **released on memory pressure and backgrounding**; a released item simply re-loads normally on next use.
+> - The gold-standard functional test is **scroll-feed promotion**: pre-render the next item, scroll to it, and confirm the very first frame appears with **no black flash**; a very fast switch before the frame is ready degrades to preload-only warm bytes.
+
 #### Each of these features is designed to enhance both flexibility and user experience, providing complete control over video playback, appearance, and user interactions in FastPix-player.
 
 # Supporting tvOS

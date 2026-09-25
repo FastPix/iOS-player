@@ -146,12 +146,10 @@ public final class FastPixSpritesheetManager {
         // Choose images host based on stream host
         let imagesHost: String
         switch assetURL.host {
-        case "stream.fastpix.io":
-            imagesHost = "images.fastpix.io"
-        case "stream.fastpix.app":
-            imagesHost = "images.fastpix.app"
-        case "venus-stream.fastpix.dev":
-            imagesHost = "venus-images.fastpix.dev"
+        case "stream.fastpix.com":
+            imagesHost = "images.fastpix.com"
+        case "stream.fastpix.co":
+            imagesHost = "images.fastpix.co"
         default:
             previewMode = .timestamp
             return

@@ -3,6 +3,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.3]
+
+- **Pre-rendering (First-Frame Decode Ahead of Display)**
+  - Added `FastPixPreRenderManager` (singleton via `FastPixPreRenderManager.shared`, or instantiate directly) to decode and retain the **first displayable frame** of an upcoming playlist item on a shadow `AVPlayer`, so promoting that item to the visible player is flash-free instead of showing a black gap while the first frame decodes.
+  - Pre-rendering is **opt-in and OFF by default**. Enable it with `isPreRenderEnabled = true` on the player; while it is false no shadow player is created and no decoder or GPU resources are used.
+  - Introduced `setupPreRendering()` to lazily create the manager and wire it to `PreloadManager` for the composition path. Safe to call repeatedly; a no-op unless `isPreRenderEnabled` is set.
+  - Introduced `preRender(playerItem:identifier:)` to schedule pre-rendering for a single item (use the `playbackId` as the identifier so the SDK can retrieve it with the same key), and `preRender(items:)` to schedule several at once.
+  - Introduced `getPreRenderedItem(for:)` for a non-consuming check that returns a fresh, ready-to-attach `AVPlayerItem` **only** once the first frame has actually been decoded, and `nil` otherwise.
+  - Introduced `consumePreRenderedItem(for:)` to tear down the shadow pipeline, release the retained frame, and return a brand-new `AVPlayerItem`. Every vended item is freshly constructed from the source URL and is never bonded to the shadow player, so AVFoundation's single-owner rule cannot be violated.
+  - Introduced `firstFramePixelBuffer(for:)` to retrieve the retained first frame as a `CVPixelBuffer`, usable as a one-frame bridging poster on the visible layer to mask the real item's first decode.
+  - Introduced `preRenderStatus(forId:)` to query progress — available both on the manager and directly on the player — and `cancel(for:)` on the manager, mirrored by `cancelPreRender(forId:)` on the player, to abandon an in-flight or ready pre-render and release its resources.
+  - Introduced `clearAll()` on `FastPixPreRenderManager` to release every entry at once — call it in `deinit` alongside the preload and precache cleanup.
+  - Introduced `PreRenderStatus` with a decode-aware set of states that `PreloadStatus` cannot express:
+    - `idle` — nothing scheduled for this id
+    - `loading` — shadow item created, asset still loading
+    - `buffering` — bytes warm and asset ready to play, first frame not yet decoded
+    - `frameReady` — first displayable frame decoded and retained; promotion is now instant
+    - `failed(Error?)` and `cancelled`
+  - Introduced `FastPixPreRenderManagerDelegate`, mirroring `PreloadManagerDelegate`, with the following callbacks:
+    - `videoPreRenderDidStart(forId:)` — fires when the shadow pipeline is created for a video
+    - `videoPreRenderDidBecomeReady(forId:)` — fires when the first frame is decoded and retained
+    - `videoPreRenderDidFail(forId:error:)` — fires when pre-rendering fails, providing the error for logging or retry logic
+    - `videoPreRenderDidCancel(forId:)` — fires when a pre-render is cancelled (e.g. via `cancel(for:)`)
+  - **Bounded concurrency**: `maxConcurrent` defaults to `1`. First-frame decode is materially heavier than the byte warming `PreloadManager` performs, and in practice only the immediate next item needs an instant picture. Requests beyond the cap are ignored rather than queued.
+  - **Composition with preloading**: the SDK schedules a pre-render only for the *immediate* next playlist item, while `PreloadManager` continues to warm bytes for the wider look-ahead window. On promotion the player prefers a pre-rendered item, falls back to a preloaded item (warm bytes), and finally loads fresh — so pre-rendering strictly adds to the existing preload behaviour and never replaces it.
+  - **DRM items degrade gracefully**: FairPlay-protected items cannot have their first frame decoded without an attached content key, so they automatically fall back to preload-only. No error is raised and no delegate failure is reported.
+  - **Resource lifecycle and release**: all pre-render entries are released on memory-warning and on app background, and ready items are reset to non-ready, so a retained frame can never outlive the conditions that justified holding it. The shadow player is paused as soon as the frame is captured, freeing the decoder while only the single frame is retained.
+  - Pre-rendering is automatically re-evaluated on `next()`, `previous()`, `jumpTo()`, and `FastPixPlaylistStateChanged`, and pre-renders for items that have scrolled past are cancelled to free memory.
+  - Diagnostic `[PreRender]` tracing is compiled out of release builds, so the feature is silent in production.
+  - Fully compatible with token-protected streams, custom domains, playlist-based playback, preload/precache, and all existing SDK features.
+
 ## [1.1.2]
 
 - Code standardization updates applied across the SDK to align with best practices and strengthen overall stability.
@@ -208,3 +239,4 @@ All SDK-managed default service endpoints have been migrated from the `.io` doma
     - Range-based resolution configuration.
 - **Rendition Order Customization**: Added support for ascending or descending rendition selection.
 - **Swift Package Manager Support**: SDK is installable via SPM using the repo URL.
+
